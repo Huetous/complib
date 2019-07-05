@@ -15,6 +15,8 @@ import xgboost as xgb
 from sklearn.linear_model import RidgeCV
 from catboost import CatBoostRegressor
 from sklearn.base import clone
+from sklearn.base import BaseEstimator
+from sklearn.base import RegressorMixin, ClassifierMixin
 
 plotly.tools.set_credentials_file(username='daddudota3', api_key='PjqulG0oXHlrVgWexu2q')
 
@@ -49,14 +51,14 @@ class metaModel():
 
 
 # -------------------------------------------------------------------------------------
-class hueLGB(metaModel):
+class huetousLGB(BaseEstimator):
     def __init__(self, params=None, task='regression', eval_metric='mae'):
         if task == 'regression':
-            super().__init__(lgb.LGBMRegressor, params, mean_absolute_error)
-        # else:
-        # super().__init__(lgb.LGBMClassifier, params, log_loss)
+            self.model = lgb.LGBMRegressor(**params)
+            self.eval_metric = eval_metric
 
     def train(self, X_tr, y_tr, X_val, y_val):
+        self.X_tr_columns = X_tr.columns
         self.model.fit(X_tr, y_tr,
                        eval_set=[(X_tr, y_tr), (X_val, y_val)],
                        eval_metric=self.eval_metric,
@@ -71,34 +73,65 @@ class hueLGB(metaModel):
 
     def feature_importances(self):
         feature_importance = pd.DataFrame()
-        feature_importance["feature"] = X.columns
-        feature_importance["importance"] = model.feature_importances_
+        feature_importance["feature"] = self.X_tr_columns
+        feature_importance["importance"] = self.model.feature_importances_
         return feature_importance
 
 
 # -------------------------------------------------------------------------------------
-class hueXGB(metaModel):
-    def __init__(self, params=None, task='regression'):
-        super().__init__(None, params)
-        self.task = task
+# class hueXGB(metaModel):
+#     def __init__(self, params=None, task='regression'):
+#         super().__init__(None, params, metric=mean_absolute_error)
+#         self.task = task
+#
+#     def train(self, X_tr, y_tr, X_val=None, y_val=None):
+#         train_data = xgb.DMatrix(data=X_tr, label=y_tr, feature_names=X_tr.columns)
+#         val_data = xgb.DMatrix(data=X_val, label=y_val, feature_names=X_val.columns)
+#         # clone?
+#         self.model = xgb.train(dtrain=train_data, num_boost_round=self.n_estimators,
+#                                evals=[(train_data, 'train'), (val_data, 'val')],
+#                                early_stopping_rounds=200,
+#                                verbose_eval=500, params=self.params)
+#
+#     def predict(self, X):
+#         # clone?
+#         return self.model.predict(xgb.DMatrix(X, feature_names=X.columns),
+#                                   ntree_limit=self.model.best_ntree_limit)
+class huetousXGB(BaseEstimator):
+    def __init__(self, params=None, num_rounds=50,
+                 early_stopping_rounds=None, verbose_eval=True):
+        self.params = params
+        self.num_rounds = num_rounds
+        self.early_stopping_round = early_stopping_rounds
+        self.verbose_eval = verbose_eval
+        self.model = None
 
-    def train(self, X_tr, y_tr, X_val=None, y_val=None):
-        train_data = xgb.DMatrix(data=X_tr, label=y_tr, feature_names=X_tr.columns)
-        val_data = xgb.DMatrix(data=X_val, label=y_val, feature_names=X_val.columns)
-        # clone?
-        self.model = xgb.train(dtrain=train_data, num_boost_round=self.n_estimators,
-                               evals=[(train_data, 'train'), (val_data, 'val')],
-                               early_stopping_rounds=200,
-                               verbose_eval=500, params=self.params)
+    def fit(self, X_tr, y_tr, X_val=None, y_val=None):
+        dtrain = xgb.DMatrix(data=X_tr, label=y_tr, feature_names=X_tr.columns)
+        if X_val is not None:
+            dval = xgb.DMatrix(data=X_val, label=y_val, feature_names=X_val.columns)
+            watchlist = [(dtrain, 'train'), (dval, 'val')]
+            self.model = xgb.train(params=self.params,
+                                   dtrain=dtrain,
+                                   num_boost_round=self.num_rounds,
+                                   early_stopping_rounds=self.early_stopping_round,
+                                   evals=watchlist,
+                                   verbose_eval=self.verbose_eval)
+        else:
+            self.model = xgb.train(params=self.params,
+                                   dtrain=dtrain,
+                                   num_boost_round=self.num_rounds,
+                                   early_stopping_rounds=self.early_stopping_round)
+        return
 
     def predict(self, X):
-        # clone?
-        return self.model.predict(xgb.DMatrix(X, feature_names=X.columns),
-                                  ntree_limit=self.model.best_ntree_limit)
+        dtest = xgb.DMatrix(X, feature_names=X.columns)
+        preds = self.model.predict(dtest, ntree_limit=self.model.best_ntree_limit)
+        return preds
 
 
 # -------------------------------------------------------------------------------------
-class hueCatBoost():
+class huetousCatBoost():
     def __init__(self, params=None):
         self.model = CatBoostRegressor(**params)
 
@@ -114,7 +147,7 @@ class hueCatBoost():
 
 
 # -------------------------------------------------------------------------------------
-class hueRidgeCV():
+class huetousRidgeCV():
     def __init__(self, params=None):
         self.model = RidgeCV(**params)
 
@@ -130,7 +163,7 @@ class hueRidgeCV():
 
 
 # -------------------------------------------------------------------------------------
-class hueSklearn(object):
+class huetousSklearn(object):
     def __init__(self, model, seed=0, params=None):
         params['random_state'] = seed
         self.model = model(**params)

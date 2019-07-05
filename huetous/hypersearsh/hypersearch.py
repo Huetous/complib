@@ -3,6 +3,7 @@
 # --------------------------------------------
 from sklearn import model_selection
 import time
+from hyperopt import hp, fmin, tpe, STATUS_OK, Trials
 
 
 # Bayesian optimization
@@ -186,6 +187,7 @@ def get_param_grid(models_names, regression=True):
 
     return param_grid
 
+
 # --------------------------------------------------------------------------------------------
 def do_param_grid_search(models, grid_param, X, y, cv_split=None):
     if cv_split is None:
@@ -203,4 +205,6 @@ def do_param_grid_search(models, grid_param, X, y, cv_split=None):
     run_total = time.perf_counter() - start_total
     print('Total optimization time: {:.2f} minutes.'.format(run_total / 60))
     print('-' * 15)
+
+
 # --------------------------------------------------------------------------------------------

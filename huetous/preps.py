@@ -7,6 +7,7 @@ from sklearn.preprocessing import LabelEncoder, OneHotEncoder, StandardScaler
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer, HashingVectorizer, FeatureHasher
 from nltk.tokenize import sent_tokenize, word_tokenize
 from nltk.corpus import stopwords
+from sklearn.neighbors import NearestNeighbors
 
 
 # General (le,ohe,freq encoding, bining, projection num on categ, transformation num)
@@ -16,13 +17,13 @@ from nltk.corpus import stopwords
 # Text (Vectorizers, TF-IDF, Embeddings)
 
 
-def do_cycle(df, cols, preffix, transform, func_name):
+def do_cycle(df, cols, preffix, transform, params, func_name):
     new_df = df.copy(deep=True)
     new_cols = []
 
     len_before = len(new_df.columns.values)
     for col in cols:
-        new_df[preffix + col] = transform(new_df[col])
+        new_df[preffix + col] = transform(new_df[col], **params)
         new_cols.append(preffix + col)
     len_after = len(new_df.columns.values)
 
@@ -58,17 +59,23 @@ def do_date_extract(df, col, preffix='date_', params=None):
 def do_cat_le(df, cols, preffix='_le_', params=None):
     le_enc = LabelEncoder()
     return do_cycle(df, cols, preffix,
-                    le_enc.fit_transform, 'do_le')
+                    le_enc.fit_transform, None, 'do_le')
 
 
 def do_cat_ohe(df, cols, preffix='_ohe_', params=None):
     oh_enc = OneHotEncoder(**params, handle_unknown='ignore', sparse=False)
     return do_cycle(df, cols, preffix,
-                    oh_enc.fit_transform, 'do_ohe')
+                    oh_enc.fit_transform,  None, 'do_ohe')
 
 
 def do_cat_freq(df, cols, preffix='_freq_', params=None):
     return 0
+
+
+def do_cat_dummy(df, cols, preffix='dummy_', params=None):
+    params['drop_first'] = True
+    return do_cycle(df, cols, preffix,
+                    pd.get_dummies, params, 'do_cat_dummy')
 
 
 # --------------------------------------------------------------------------------------------
@@ -77,7 +84,7 @@ def do_cat_freq(df, cols, preffix='_freq_', params=None):
 def do_num_st_scale(df, cols, preffix='_st_scale_', params=None):
     st_scaler = StandardScaler()
     return do_cycle(df, cols, preffix,
-                    st_scaler.fit_transform, 'do_st_scale')
+                    st_scaler.fit_transform, None, 'do_st_scale')
 
 
 # --------------------------------------------------------------------------------------------
@@ -89,13 +96,13 @@ def do_num_st_scale(df, cols, preffix='_st_scale_', params=None):
 def do_text_tf_idf(df, cols, preffix='_tfidf_', params=None):
     tfidf_vect = TfidfVectorizer(**params)
     return do_cycle(df, cols, preffix,
-                    tfidf_vect.fit_transform, 'do_tf_idf')
+                    tfidf_vect.fit_transform, None, 'do_tf_idf')
 
 
 def do_text_cnt_vect(df, cols, preffix='_cnt_vect_', params=None):
     count_vect = CountVectorizer(**params)
     return do_cycle(df, cols, preffix,
-                    count_vect.fit_transform, 'do_cnt_vect')
+                    count_vect.fit_transform,None, 'do_cnt_vect')
 
 
 def do_text_w2vec(df, cols, preffix='_w2vec_', params=None):
@@ -105,7 +112,7 @@ def do_text_w2vec(df, cols, preffix='_w2vec_', params=None):
 def do_text_hash_vect(df, cols, preffix='_hash_vect_', params=None):
     hash_vect = HashingVectorizer(**params)
     return do_cycle(df, cols, preffix,
-                    hash_vect.fit_transform, 'do_hash_vect')
+                    hash_vect.fit_transform, None,'do_hash_vect')
 
 
 def do_text_feat_hash(df, cols, preffix='_feat_hash_', params=None):
@@ -115,7 +122,7 @@ def do_text_feat_hash(df, cols, preffix='_feat_hash_', params=None):
 def do_text_tokenize(df, cols, preffix='_token_', params=None):
     tokenz = Tokenizer(**params)
     return do_cycle(df, cols, preffix,
-                    tokenz.sequences_to_matrix, 'do_tokenize')
+                    tokenz.sequences_to_matrix,None, 'do_tokenize')
 
 
 # --------------------------------------------------------
@@ -132,6 +139,27 @@ def do_text_remove_stopwords(data):
 
 
 # --------------------------------------------------------------------------------------------
+
+def get_feat_knn(df, cols, preffix='knn_', params=None):
+    new_df = df.copy(deep=True)
+    scaler = StandardScaler()
+    scaler.fit(new_df[cols])
+    new_df = pd.DataFrame(scaler.transform(new_df[cols]), columns=new_df.columns)
+
+    neigh = NearestNeighbors(**params, n_jobs=-1)
+    neigh.fit(new_df)
+    dists, _ = neigh.kneighbors(new_df, **params)
+
+    new_df[preffix + 'mean_dist'] = dists.mean(axis=1)
+    new_df[preffix + 'max_dist'] = dists.max(axis=1)
+    new_df[preffix + 'min_dist'] = dists.min(axis=1)
+    return [new_df, [preffix + 'mean_dist', preffix + 'max_dist', preffix + 'min_dist']]
+
+# --------------------------------------------------------------------------------------------
+# Times-series and signal processing
+def get_rolling_mean(df, cols, preffix='rolling_', parans=None):
+    return [0, 0]
+
 
 # //////////////////////////////////////
 #           Neural Network

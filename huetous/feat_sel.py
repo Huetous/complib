@@ -3,6 +3,8 @@ from sklearn import feature_selection, model_selection
 from sklearn.base import clone
 
 # RFE
+# SelectPercentile
+# SelectKBest
 # Shuffle Permutation
 # --------------------------------------------------------------------------------------------
 
@@ -35,3 +37,17 @@ def do_feat_rfe(model, X_train, y_train, cv_split=None):
     print('After Test with bin score 3*std: +/- {:.3f}'.format(rfe_res['test_score'].std() * 3 * 100))
     print('-' * 15)
 
+# --------------------------------------------------------------------------------------------
+# def do_drop_highly_corr_feats():
+#     corr_matrix = X.corr().abs()
+#
+#     # Select upper triangle of correlation matrix
+#     upper = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(np.bool))
+#
+#     # Find index of feature columns with correlation greater than 0.95
+#     to_drop = [column for column in upper.columns if any(upper[column] > 0.99)]
+#     X = X.drop(to_drop, axis=1)
+#     X_test = X_test.drop(to_drop, axis=1)
+#     result_dict_lgb_lgb = artgor_utils.train_model_regression(X, X_test, y, params=params,
+#                                                               folds=folds, model_type='lgb',
+#
