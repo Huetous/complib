@@ -1,6 +1,8 @@
 from sklearn import feature_selection, model_selection
-
+from boruta import BorutaPy
 from sklearn.base import clone
+import pandas as pd
+
 
 # RFE
 # SelectPercentile
@@ -37,6 +39,7 @@ def do_feat_rfe(model, X_train, y_train, cv_split=None):
     print('After Test with bin score 3*std: +/- {:.3f}'.format(rfe_res['test_score'].std() * 3 * 100))
     print('-' * 15)
 
+
 # --------------------------------------------------------------------------------------------
 # def do_drop_highly_corr_feats():
 #     corr_matrix = X.corr().abs()
@@ -51,3 +54,10 @@ def do_feat_rfe(model, X_train, y_train, cv_split=None):
 #     result_dict_lgb_lgb = artgor_utils.train_model_regression(X, X_test, y, params=params,
 #                                                               folds=folds, model_type='lgb',
 #
+
+def do_feat_boruta(model, X_tr, y_tr):
+    selector = BorutaPy(model, n_estimators='auto', verbose=0,
+                        random_state=1, max_iter=500)
+    selector.fit(X_tr.values, y_tr.values)
+    X_filtered = selector.transform(X_tr.values)
+    return pd.DataFrame(X_filtered, columns=X_tr.columns[selector.support_])

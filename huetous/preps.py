@@ -1,9 +1,10 @@
+from sklearn.linear_model import LinearRegression
 from tensorflow.python.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.python.keras.preprocessing.text import Tokenizer
 import numpy as np
 from sklearn import model_selection
 import pandas as pd
-from sklearn.preprocessing import LabelEncoder, OneHotEncoder, StandardScaler
+from sklearn.preprocessing import LabelEncoder, OneHotEncoder, StandardScaler, MinMaxScaler
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer, HashingVectorizer, FeatureHasher
 from nltk.tokenize import sent_tokenize, word_tokenize
 from nltk.corpus import stopwords
@@ -53,19 +54,32 @@ def do_date_extract(df, col, preffix='date_', params=None):
     return [new_df, new_cols]
 
 
+def get_trend_feat(df, col, preffix='trend_', params=None):
+    idx = np.array(range(len(df[col])))
+    new_df = df.copy(deep=True)
+
+    if params['abs'] is True:
+        new_df[col] = np.abs(new_df[col])
+
+    lr = LinearRegression()
+    lr.fit(idx.reshape(-1, 1), new_df[col])
+    new_df[preffix + col] = lr.coef_[0]
+    return [new_df, preffix + col]
+
+
 # --------------------------------------------------------------------------------------------
 # Categories
 # --------------------------------------------------------------------------------------------
-def do_cat_le(df, cols, preffix='_le_', params=None):
+def do_cat_le(df, cols, preffix='le_', params=None):
     le_enc = LabelEncoder()
     return do_cycle(df, cols, preffix,
                     le_enc.fit_transform, None, 'do_le')
 
 
-def do_cat_ohe(df, cols, preffix='_ohe_', params=None):
+def do_cat_ohe(df, cols, preffix='ohe_', params=None):
     oh_enc = OneHotEncoder(**params, handle_unknown='ignore', sparse=False)
     return do_cycle(df, cols, preffix,
-                    oh_enc.fit_transform,  None, 'do_ohe')
+                    oh_enc.fit_transform, None, 'do_ohe')
 
 
 def do_cat_freq(df, cols, preffix='_freq_', params=None):
@@ -81,15 +95,22 @@ def do_cat_dummy(df, cols, preffix='dummy_', params=None):
 # --------------------------------------------------------------------------------------------
 # Numerical
 # --------------------------------------------------------------------------------------------
-def do_num_st_scale(df, cols, preffix='_st_scale_', params=None):
+def do_num_st_scale(df, cols, preffix='st_scale_', params=None):
     st_scaler = StandardScaler()
     return do_cycle(df, cols, preffix,
                     st_scaler.fit_transform, None, 'do_st_scale')
 
 
+def do_num_minmax_scale(df, cols, preffix='minmax_', params=None):
+    minmax_scaler = MinMaxScaler()
+    return do_cycle(df, cols, preffix,
+                    minmax_scaler.fit_transform, None, 'do_num_minmax_scale')
+
+
 # --------------------------------------------------------------------------------------------
 # Special
 # --------------------------------------------------------------------------------------------
+
 # --------------------------------------------------------------------------------------------
 # Text
 # --------------------------------------------------------------------------------------------
@@ -102,7 +123,7 @@ def do_text_tf_idf(df, cols, preffix='_tfidf_', params=None):
 def do_text_cnt_vect(df, cols, preffix='_cnt_vect_', params=None):
     count_vect = CountVectorizer(**params)
     return do_cycle(df, cols, preffix,
-                    count_vect.fit_transform,None, 'do_cnt_vect')
+                    count_vect.fit_transform, None, 'do_cnt_vect')
 
 
 def do_text_w2vec(df, cols, preffix='_w2vec_', params=None):
@@ -112,7 +133,7 @@ def do_text_w2vec(df, cols, preffix='_w2vec_', params=None):
 def do_text_hash_vect(df, cols, preffix='_hash_vect_', params=None):
     hash_vect = HashingVectorizer(**params)
     return do_cycle(df, cols, preffix,
-                    hash_vect.fit_transform, None,'do_hash_vect')
+                    hash_vect.fit_transform, None, 'do_hash_vect')
 
 
 def do_text_feat_hash(df, cols, preffix='_feat_hash_', params=None):
@@ -122,7 +143,7 @@ def do_text_feat_hash(df, cols, preffix='_feat_hash_', params=None):
 def do_text_tokenize(df, cols, preffix='_token_', params=None):
     tokenz = Tokenizer(**params)
     return do_cycle(df, cols, preffix,
-                    tokenz.sequences_to_matrix,None, 'do_tokenize')
+                    tokenz.sequences_to_matrix, None, 'do_tokenize')
 
 
 # --------------------------------------------------------
@@ -154,6 +175,7 @@ def get_feat_knn(df, cols, preffix='knn_', params=None):
     new_df[preffix + 'max_dist'] = dists.max(axis=1)
     new_df[preffix + 'min_dist'] = dists.min(axis=1)
     return [new_df, [preffix + 'mean_dist', preffix + 'max_dist', preffix + 'min_dist']]
+
 
 # --------------------------------------------------------------------------------------------
 # Times-series and signal processing

@@ -15,6 +15,20 @@ import pandas as pd
 # Categories variense
 
 # --------------------------------------------------------------------------------------------
+def plot_oof_preds(target, preds, class_name):
+    plot_data =pd.DataFrame()
+    plot_data['pred'] = preds['pred']
+    plot_data['target'] = target
+
+    plt.figure(figsize=(6, 6))
+    sns.scatterplot(x='pred', y='target',
+                    data=plot_data.loc[plot_data[class_name] == class_name, ['pred', 'target']])
+    plt.xlabel('pred')
+    plt.ylabel('target')
+    plt.title(f'{class_name}', fontsize=18)
+    plt.show()
+
+
 # --------------------------------------------------------------------------------------------
 def get_columns_by_type(df, ntypes):
     columns = []
@@ -22,6 +36,7 @@ def get_columns_by_type(df, ntypes):
         if df[col].dtype in ntypes:
             columns.append(col)
     return columns
+
 
 # --------------------------------------------------------------------------------------------
 # --------------------------------------------------------------------------------------------

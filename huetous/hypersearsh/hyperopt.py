@@ -22,9 +22,11 @@ xgb_space = {
 lgb_space = {
     'num_leaves': hp.quniform('num_leaves', 10, 200, 1),
     'min_data_in_leaf': hp.quniform('min_data_in_leaf', 10, 200, 1),
+    'max_depth': hp.quniform('max_depth', 1, 20, 1),
     'feature_fraction': hp.uniform('feature_fraction', 0.75, 1.0),
     'bagging_fraction': hp.uniform('bagging_fraction', 0.75, 1.0),
-    'learning_rate': hp.loguniform('learning_rate', -5.0, -2.3),
+    # 'learning_rate': hp.loguniform('learning_rate', -5.0, -2.3),
+    'learning_rate': hp.uniform('learning_rate', 0.1, 0.9),
     'min_sum_hessian_in_leaf': hp.loguniform('min_sum_hessian_in_leaf', 0, 2.3),
     'max_bin': hp.quniform('max_bin', 64, 512, 1),
     'bagging_freq': hp.quniform('bagging_freq', 1, 5, 1),
