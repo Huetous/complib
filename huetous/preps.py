@@ -73,13 +73,19 @@ def get_trend_feat(df, col, preffix='trend_', params=None):
 def do_cat_le(df, cols, preffix='le_', params=None):
     le_enc = LabelEncoder()
     return do_cycle(df, cols, preffix,
-                    le_enc.fit_transform, None, 'do_le')
+                    le_enc.fit_transform, None, 'do_cat_le')
 
 
 def do_cat_ohe(df, cols, preffix='ohe_', params=None):
     oh_enc = OneHotEncoder(**params, handle_unknown='ignore', sparse=False)
     return do_cycle(df, cols, preffix,
-                    oh_enc.fit_transform, None, 'do_ohe')
+                    oh_enc.fit_transform, None, 'do_cat_ohe')
+
+
+def do_cat_dummmy(df, cols, preffix='dummy_', params=None):
+    params['drop_first'] = True
+    return do_cycle(df, cols, preffix,
+                    pd.get_dummies, params, 'do_cat_dummy')
 
 
 def do_cat_freq(df, cols, preffix='_freq_', params=None):
@@ -105,6 +111,16 @@ def do_num_minmax_scale(df, cols, preffix='minmax_', params=None):
     minmax_scaler = MinMaxScaler()
     return do_cycle(df, cols, preffix,
                     minmax_scaler.fit_transform, None, 'do_num_minmax_scale')
+
+
+def do_num_cut(df, cols, preffix='cut_', params=None):
+    return do_cycle(df, cols, preffix,
+                    pd.cut, None, 'do_num_cut')
+
+
+def do_num_qcut(df, cols, preffix='cut_', params=None):
+    return do_cycle(df, cols, preffix,
+                    pd.qcut, None, 'do_num_qcut')
 
 
 # --------------------------------------------------------------------------------------------
