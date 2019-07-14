@@ -9,6 +9,9 @@ from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer, Ha
 from nltk.tokenize import sent_tokenize, word_tokenize
 from nltk.corpus import stopwords
 from sklearn.neighbors import NearestNeighbors
+from sklearn.model_selection import StratifiedKFold
+from itertools import combinations
+from multiprocessing import Pool
 
 
 # General (le,ohe,freq encoding, bining, projection num on categ, transformation num)
@@ -16,6 +19,19 @@ from sklearn.neighbors import NearestNeighbors
 # Trees
 # Special (time-series, images, FM/FFM)
 # Text (Vectorizers, TF-IDF, Embeddings)
+
+
+def do_cycle_memorysafe(df, cols, preffix, transform, params, func_name):
+    new_df = df[cols].copy(deep=True)
+    new_cols = []
+
+    for col in cols:
+        new_df[preffix + col] = transform(new_df[col], **params)
+        new_cols.append(preffix + col)
+
+    print(func_name + ': Done')
+    print('Added ', new_df.shape[1], ' new columns.')
+    return [new_df, new_cols]
 
 
 def do_cycle(df, cols, preffix, transform, params, func_name):
@@ -74,6 +90,60 @@ def do_cat_le(df, cols, preffix='le_', params=None):
     le_enc = LabelEncoder()
     return do_cycle(df, cols, preffix,
                     le_enc.fit_transform, None, 'do_cat_le')
+
+
+def do_cat_le_tr_te(train, test, cols, preffix='train_test_le_', params=None):
+    le = LabelEncoder()
+    new_train = train.copy(deep=True)
+    new_test = test.copy(deep=True)
+    new_cols = []
+    for col in cols:
+        le.fit(new_train[col].append(new_test[col]))
+        new_cols.append(preffix + col)
+        new_train[preffix + col] = le.transform(new_train[col])
+        new_test[preffix + col] = le.transform(new_test[col])
+    return [new_train, new_test, ]
+
+
+def for_target_enc(col, new_train, new_test, preffix, skf):
+    new_train[preffix + col] = 0
+    for i, (tr_idx, te_idx) in enumerate(skf.split(new_train, new_train.TARGET)):
+        enc = new_train.iloc[tr_idx].groupby(col)['TARGET'].mean()
+        new_train.set_index(col, inplace=True)
+        new_train.iloc[te_idx, -1] = enc
+        new_train.reset_index(inplace=True)
+    enc = new_train.groupby(col)['TARGET'].mean()
+    new_test[preffix + col] = 0
+    new_test.set_index(col, inplace=True)
+    new_test.iloc[:, -1] = enc
+    new_test.reset_index(inplace=True)
+
+
+def do_cat_target_enc(train, test, cols, preffix='train_test_target_enc_', params=None):
+    params['n_splits'] = 5
+    params['random_state'] = 42
+    params['shuffle'] = True
+    skf = StratifiedKFold(**params)
+    new_train = train[cols].copy(deep=True)
+    new_test = test[cols].copy(deep=True)
+    new_cols = []
+    for col in cols:
+        for_target_enc(col, new_train, new_test, preffix, skf)
+        new_cols.append(preffix + col)
+
+
+def do_cat_target_enc_multi(train, test, cols, preffix='train_test_target_enc_multi_', params=None):
+    comb_cols = []
+    cat_comb = list(combinations(cols, 2))
+    new_train = train[cols].copy(deep=True)
+    new_test = test[cols].copy(deep=True)
+    for c1, c2 in cat_comb:
+        new_train[f'{c1}-{c2}'] = new_train[c1] + new_train[c2]
+        new_test[f'{c1}-{c2}'] = new_test[c1] + new_test[c2]
+        comb_cols.append(f'{c1}-{c2}')
+    pool = Pool(10)
+    pool.map(for_target_enc, comb_cols)
+    pool.close()
 
 
 def do_cat_ohe(df, cols, preffix='ohe_', params=None):

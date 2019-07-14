@@ -5,8 +5,31 @@ import catboost
 import hyperopt
 from hyperopt import hp, fmin, tpe, STATUS_OK, Trials
 import numpy as np
+import pandas as pd
+import csv, json, ast, os
+
+from timeit import default_timer as timer
+from sklearn.metrics import roc_auc_score
+
+MAX_EVALS = 1000
+N_FOLDS = 10
 
 # ------------------------------------------------------------------------
+lgb_space_wk = {
+    'boosting_type': hp.choice('boosting_type',
+                               [{'boosting_type': 'gbdt', 'subsample': hp.uniform('gdbt_subsample', 0.5, 1)},
+                                {'boosting_type': 'dart', 'subsample': hp.uniform('dart_subsample', 0.5, 1)},
+                                {'boosting_type': 'goss', 'subsample': 1.0}]),
+    'num_leaves': hp.quniform('num_leaves', 20, 150, 1),
+    'learning_rate': hp.loguniform('learning_rate', np.log(0.01), np.log(0.5)),
+    'subsample_for_bin': hp.quniform('subsample_for_bin', 20000, 300000, 20000),
+    'min_child_samples': hp.quniform('min_child_samples', 20, 500, 5),
+    'reg_alpha': hp.uniform('reg_alpha', 0.0, 1.0),
+    'reg_lambda': hp.uniform('reg_lambda', 0.0, 1.0),
+    'colsample_bytree': hp.uniform('colsample_by_tree', 0.6, 1.0),
+    'is_unbalance': hp.choice('is_unbalance', [True, False]),
+}
+
 xgb_space = {
     'max_depth': hp.quniform("max_depth", 4, 7, 1),
     'min_child_weight': hp.quniform('min_child_weight', 1, 20, 1),
@@ -43,6 +66,111 @@ cat_space = {
 
 
 # ------------------------------------------------------------------------
+class hyperBoost():
+    def __init__(self,
+                 X_tr, y_tr, X_te, y_te,
+                 out_file, seed=42):
+
+        self.out_file = out_file + '.csv'
+        of_connection = open(self.out_file, 'w')
+        writer = csv.writer(of_connection)
+
+        headers = ['loss', 'hypers', 'iteration', 'runtime', 'score']
+        writer.writerow(headers)
+        of_connection.close()
+
+        self.trials = Trials()
+        self.iters = 0
+        self.seed = seed
+
+        self.X_tr = X_tr
+        self.X_te = X_te
+        self.y_tr = y_tr
+        self.y_te = y_te
+
+    def objective(self, hypers):
+        self.iters += 1
+
+        if 'n_estimators' in hypers:
+            del hypers['n_estimators']
+
+        subsample = hypers['boosting_type'].get('subsample', 1.0)
+        hypers['boosting_type'] = hypers['boosting_type']['boosting_type']
+        hypers['subsample'] = subsample
+
+        for parameter_name in ['num_leaves', 'subsample_for_bin', 'min_child_samples']:
+            hypers[parameter_name] = int(hypers[parameter_name])
+
+        start = timer()
+        cv_results = lightgbm.cv(hypers, self.X_tr,
+                                 nfold=N_FOLDS, seed=self.seed,
+                                 num_boost_round=10000,
+                                 early_stopping_rounds=100, metrics='auc')
+        run_time = timer() - start
+
+        best_score = cv_results['auc-mean'][-1]
+        loss = 1 - best_score
+        n_estimators = len(cv_results['auc-mean'])
+        hypers['n_estimators'] = n_estimators
+
+        of_connection = open(self.out_file, 'a')
+        writer = csv.writer(of_connection)
+        writer.writerow([loss, hypers, self.iters, run_time, best_score])
+        of_connection.close()
+
+        return {'loss': loss, 'hypers': hypers, 'iteration': self.iters,
+                'train_time': run_time, 'status': STATUS_OK}
+
+    def evaluate(self, name='Bayesian'):
+        if os.path.isfile(self.out_file):
+            results = pd.read_csv(self.out_file)
+        else:
+            raise Exception('File does not exist!')
+        results['hypers'] = results['hypers'].map(ast.literal_eval)
+        results = results.sort_values('score', ascending=False).reset_index(drop=True)
+
+        print('Best cv score from {}: {:.5f}, iteration {}.'
+              .format(name, results.loc[0, 'score'], results.loc[0, 'iteration']))
+        hypers = results.loc[0, 'hypers']
+
+        model = lightgbm.LGBMClassifier(**hypers)
+        model.fit(self.X_tr, self.y_tr)
+        preds = model.predict_proba(self.X_te)[:, 1]
+        print('ROC AUC from {} on test data = {:.5f}.'.format(name, roc_auc_score(self.y_te, preds)))
+
+        hyp_df = pd.DataFrame(columns=list(results.loc[0, 'hypers'].keys()))
+        for i, hyp in enumerate(results['hypers']):
+            hyp_df = hyp_df.append(pd.DataFrame(hyp, index=[0]), ignore_index=True)
+
+        hyp_df['iteration'] = results['iteration']
+        hyp_df['score'] = results['score']
+
+        return hyp_df
+
+    def run(self, space, trials_save=True, trials_fname=None):
+        if trials_save and trials_fname is None:
+            raise Exception('Trials filename is None')
+        else:
+            trials_fname += '.json'
+
+        best = fmin(fn=self.objective,
+                    space=space, algo=tpe.suggest,
+                    trials=self.trials, max_evals=MAX_EVALS)
+
+        trials_dict = sorted(self.trials.results, key=lambda x: x['loss'])
+        print('hyper_lgb: Done')
+        print('Best results:')
+        print(trials_dict[:1])
+
+        if trials_save:
+            with open(trials_fname, 'w') as f:
+                f.write(json.dumps(trials_dict))
+
+        return best
+
+
+# ------------------------------------------------------------------------
+
 class xgb_hyperopt():
     def __init__(self, X_tr, y_tr, X_val, y_val, X_te, y_te,
                  n_probes=500, algo=tpe.suggest,
