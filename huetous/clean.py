@@ -85,36 +85,92 @@ class Cleaner():
             self.df[col + "_was_missing"] = self.df[col].isnull()
         self.verbose('do_was_missing_cols')
 
-    def show_missing_data(self, plot=False):
-        feats_name = []
-        feats_percent = []
-        percents = (self.df.isnull().sum() / self.df.isnull().count()).sort_values(ascending=False)
+    def show_nunique(self, drop_single=True):
+        unique_counts = self.df.nunique()
+        unique_stats = pd.DataFrame(unique_counts).rename(columns={'index': 'feature', 0: 'nunique'})
 
-        print('Missing data')
-        for index in percents.index:
-            if percents[index] != 0:
-                feats_name.append(index)
-                feats_percent.append(percents[index])
-                print('{} : {:.5f}'.format(index, percents[index]))
-        print("\n")
-        if plot:
-            f, ax = plt.subplots(figsize=(9, 6))
-            plt.xticks(rotation='90')
-            sns.barplot(x=feats_name, y=feats_percent)
-            plt.xlabel('Features', fontsize=15)
-            plt.ylabel('Percent of missing values', fontsize=15)
-            plt.title('Percent missing data by feature', fontsize=15)
-            plt.show()
+        if drop_single:
+            to_drop = list(unique_counts.index)
+            self.df = self.df.drop(to_drop, axis=1)
 
-    def show_duplicates(self):
-        duplicates = self.df[self.df.duplicated()]
-        print('Number of duplicates:', len(duplicates))
-        print(duplicates)
+        unique_stats.plot.hist(edgecolor='k', figsize=(7, 5))
+        plt.ylabel('Frequency', size=14)
+        plt.xlabel('Unique Values', size=14)
+        plt.show()
+        self.verbose('show_single_unique')
 
-    def show_skewed(self):
-        sk_df = pd.DataFrame([{'column': col, 'uniq': self.df[col].nunique(),
-                               'skewness': self.df[col].value_counts(normalize=True).values[0] * 100} for col in
-                              self.df.columns])
-        sk_df = sk_df.sort_values('skewness', ascending=False)
-        print('Skewed features: \n')
-        print(sk_df)
+    def do_find_colinear(self, threshold=0.99, do_ohe=False, drop=False):
+        if do_ohe:
+            corr_matrix = pd.get_dummies(self.df).corr()
+        else:
+            corr_matrix = self.df.corr()
+
+        upper = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(np.bool))
+        to_drop = [column for column in upper.columns if any(upper[column].abs() > threshold)]
+
+        record_collinear = pd.DataFrame(columns=['drop_feature', 'corr_feature', 'corr_value'])
+        for column in to_drop:
+            corr_features = list(upper.index[upper[column].abs() > threshold])
+            corr_values = list(upper[column][upper[column].abs() > threshold])
+            drop_features = [column for _ in range(len(corr_features))]
+
+            temp_df = pd.DataFrame.from_dict({'drop_feature': drop_features,
+                                              'corr_feature': corr_features,
+                                              'corr_value': corr_values})
+            record_collinear = record_collinear.append(temp_df, ignore_index=True)
+
+        if drop:
+            self.df = self.df.drop(to_drop, axis=1)
+
+        corr_matrix_plot = corr_matrix.loc[list(set(record_collinear['corr_feature'])),
+                                           list(set(record_collinear['drop_feature']))]
+
+        f, ax = plt.subplots(figsize=(10, 8))
+        cmap = sns.diverging_palette(220, 10, as_cmap=True)
+        sns.heatmap(corr_matrix_plot, cmap=cmap, center=0,
+                    linewidths=.25, cbar_kws={"shrink": 0.6})
+
+        ax.set_yticks([x + 0.5 for x in list(range(corr_matrix_plot.shape[0]))])
+        ax.set_yticklabels(list(corr_matrix_plot.index), size=int(160 / corr_matrix_plot.shape[0]))
+        ax.set_xticks([x + 0.5 for x in list(range(corr_matrix_plot.shape[1]))])
+        ax.set_xticklabels(list(corr_matrix_plot.columns), size=int(160 / corr_matrix_plot.shape[1]))
+        plt.show()
+
+        self.verbose('do_find_colinear')
+
+
+def show_missing_data(self, plot=False):
+    feats_name = []
+    feats_percent = []
+    percents = (self.df.isnull().sum() / self.df.isnull().count()).sort_values(ascending=False)
+
+    print('Missing data')
+    for index in percents.index:
+        if percents[index] != 0:
+            feats_name.append(index)
+            feats_percent.append(percents[index])
+            print('{} : {:.5f}'.format(index, percents[index]))
+    print("\n")
+    if plot:
+        f, ax = plt.subplots(figsize=(9, 6))
+        plt.xticks(rotation='90')
+        sns.barplot(x=feats_name, y=feats_percent)
+        plt.xlabel('Features', fontsize=15)
+        plt.ylabel('Percent of missing values', fontsize=15)
+        plt.title('Percent missing data by feature', fontsize=15)
+        plt.show()
+
+
+def show_duplicates(self):
+    duplicates = self.df[self.df.duplicated()]
+    print('Number of duplicates:', len(duplicates))
+    print(duplicates)
+
+
+def show_skewed(self):
+    sk_df = pd.DataFrame([{'column': col, 'uniq': self.df[col].nunique(),
+                           'skewness': self.df[col].value_counts(normalize=True).values[0] * 100} for col in
+                          self.df.columns])
+    sk_df = sk_df.sort_values('skewness', ascending=False)
+    print('Skewed features: \n')
+    print(sk_df)

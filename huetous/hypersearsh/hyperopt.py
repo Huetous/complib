@@ -66,7 +66,7 @@ cat_space = {
 
 
 # ------------------------------------------------------------------------
-class hyperBoost():
+class hyperLGB():
     def __init__(self,
                  X_tr, y_tr, X_te, y_te,
                  out_file, seed=42):
