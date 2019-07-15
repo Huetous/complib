@@ -1,14 +1,8 @@
-from sklearn.impute import SimpleImputer
-
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-import re
 
-
-# Categories cleaning
-# Categories concatenation
 
 class Cleaner():
     def __init__(self, df):
@@ -46,8 +40,8 @@ class Cleaner():
         self.df[col] = self.df[col].astype(astype)
         self.verbose('do_fillna_meanstd')
 
-    def do_mapping(self, col, map, astype=np.int16):
-        self.df[col] = self.df[col].map(map).astype(astype)
+    def do_mapping(self, col, map_, astype=np.int16):
+        self.df[col] = self.df[col].map(map_).astype(astype)
         self.verbose('do_mapping')
 
     def do_reduce_memory_usage(self, verbose=True):
@@ -78,6 +72,7 @@ class Cleaner():
         if verbose:
             print('Mem. usage decreased to {:5.2f} Mb ({:.1f}% reduction)'.format(end_mem, 100 * (
                     start_mem - end_mem) / start_mem))
+        self.verbose('do_reduce_memory_usage')
 
     def do_was_missing_cols(self):
         cols_with_missing = [col for col in self.df.columns if self.df[col].isnull().any()]
@@ -99,7 +94,7 @@ class Cleaner():
         plt.show()
         self.verbose('show_single_unique')
 
-    def do_find_colinear(self, threshold=0.99, do_ohe=False, drop=False):
+    def do_find_collinear(self, threshold=0.99, do_ohe=False, drop=False):
         if do_ohe:
             corr_matrix = pd.get_dummies(self.df).corr()
         else:
@@ -135,42 +130,41 @@ class Cleaner():
         ax.set_xticks([x + 0.5 for x in list(range(corr_matrix_plot.shape[1]))])
         ax.set_xticklabels(list(corr_matrix_plot.columns), size=int(160 / corr_matrix_plot.shape[1]))
         plt.show()
+        self.verbose('do_find_collinear')
 
-        self.verbose('do_find_colinear')
+    def show_missing_data(self, plot=False):
+        feats_name = []
+        feats_percent = []
+        percents = (self.df.isnull().sum() / self.df.isnull().count()).sort_values(ascending=False)
 
+        print('Missing data')
+        for index in percents.index:
+            if percents[index] != 0:
+                feats_name.append(index)
+                feats_percent.append(percents[index])
+                print('{} : {:.5f}'.format(index, percents[index]))
+        print("\n")
+        if plot:
+            f, ax = plt.subplots(figsize=(9, 6))
+            plt.xticks(rotation='90')
+            sns.barplot(x=feats_name, y=feats_percent)
+            plt.xlabel('Features', fontsize=15)
+            plt.ylabel('Percent of missing values', fontsize=15)
+            plt.title('Percent missing data by feature', fontsize=15)
+            plt.show()
+        self.verbose('show_missing_data')
 
-def show_missing_data(self, plot=False):
-    feats_name = []
-    feats_percent = []
-    percents = (self.df.isnull().sum() / self.df.isnull().count()).sort_values(ascending=False)
+    def show_duplicates(self):
+        duplicates = self.df[self.df.duplicated()]
+        print('Number of duplicates:', len(duplicates))
+        print(duplicates)
+        self.verbose('show_duplicates')
 
-    print('Missing data')
-    for index in percents.index:
-        if percents[index] != 0:
-            feats_name.append(index)
-            feats_percent.append(percents[index])
-            print('{} : {:.5f}'.format(index, percents[index]))
-    print("\n")
-    if plot:
-        f, ax = plt.subplots(figsize=(9, 6))
-        plt.xticks(rotation='90')
-        sns.barplot(x=feats_name, y=feats_percent)
-        plt.xlabel('Features', fontsize=15)
-        plt.ylabel('Percent of missing values', fontsize=15)
-        plt.title('Percent missing data by feature', fontsize=15)
-        plt.show()
-
-
-def show_duplicates(self):
-    duplicates = self.df[self.df.duplicated()]
-    print('Number of duplicates:', len(duplicates))
-    print(duplicates)
-
-
-def show_skewed(self):
-    sk_df = pd.DataFrame([{'column': col, 'uniq': self.df[col].nunique(),
-                           'skewness': self.df[col].value_counts(normalize=True).values[0] * 100} for col in
-                          self.df.columns])
-    sk_df = sk_df.sort_values('skewness', ascending=False)
-    print('Skewed features: \n')
-    print(sk_df)
+    def show_skewed(self):
+        sk_df = pd.DataFrame([{'column': col, 'uniq': self.df[col].nunique(),
+                               'skewness': self.df[col].value_counts(normalize=True).values[0] * 100} for col in
+                              self.df.columns])
+        sk_df = sk_df.sort_values('skewness', ascending=False)
+        print('Skewed features: \n')
+        print(sk_df)
+        self.verbose('show_skewed')

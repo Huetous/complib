@@ -105,46 +105,72 @@ def do_cat_le_tr_te(train, test, cols, preffix='train_test_le_', params=None):
     return [new_train, new_test, ]
 
 
-def for_target_enc(col, new_train, new_test, preffix, skf):
-    new_train[preffix + col] = 0
-    for i, (tr_idx, te_idx) in enumerate(skf.split(new_train, new_train.TARGET)):
-        enc = new_train.iloc[tr_idx].groupby(col)['TARGET'].mean()
-        new_train.set_index(col, inplace=True)
-        new_train.iloc[te_idx, -1] = enc
-        new_train.reset_index(inplace=True)
-    enc = new_train.groupby(col)['TARGET'].mean()
-    new_test[preffix + col] = 0
-    new_test.set_index(col, inplace=True)
-    new_test.iloc[:, -1] = enc
-    new_test.reset_index(inplace=True)
-
-
-def do_cat_target_enc(train, test, cols, preffix='train_test_target_enc_', params=None):
-    params['n_splits'] = 5
-    params['random_state'] = 42
-    params['shuffle'] = True
-    skf = StratifiedKFold(**params)
-    new_train = train[cols].copy(deep=True)
-    new_test = test[cols].copy(deep=True)
+def do_cat_target_expand_mean(df, cols, target, preffix='target_expand_mean_'):
+    new_df = df.copy(deep=True)
     new_cols = []
+
     for col in cols:
-        for_target_enc(col, new_train, new_test, preffix, skf)
+        cumsum = new_df.groupby(col)[target].cumsum() - new_df[target]
+        cumcnt = new_df.groupby(col).cumcount()
+        new_df[preffix + col] = cumsum / cumcnt
+        new_df[preffix + col].fillna(0.3343, inplace=True)
         new_cols.append(preffix + col)
+    return [new_df, new_cols]
 
 
-def do_cat_target_enc_multi(train, test, cols, preffix='train_test_target_enc_multi_', params=None):
-    comb_cols = []
-    cat_comb = list(combinations(cols, 2))
-    new_train = train[cols].copy(deep=True)
-    new_test = test[cols].copy(deep=True)
-    for c1, c2 in cat_comb:
-        new_train[f'{c1}-{c2}'] = new_train[c1] + new_train[c2]
-        new_test[f'{c1}-{c2}'] = new_test[c1] + new_test[c2]
-        comb_cols.append(f'{c1}-{c2}')
-    pool = Pool(10)
-    pool.map(for_target_enc, comb_cols)
-    pool.close()
 
+# -----------------------------------------------------
+# Target Mean Encoding
+# -----------------------------------------------------
+# def for_target_enc(col, train, test, preffix, skf):
+#     train[preffix + col] = 0
+#
+#     for i, (tr_idx, te_idx) in enumerate(skf.split(train, train.TARGET)):
+#         enc = train.iloc[tr_idx].groupby(col)['TARGET'].mean()
+#         train.set_index(col, inplace=True)
+#         train.iloc[te_idx, -1] = enc
+#         train.reset_index(inplace=True)
+#
+#     enc = train.groupby(col)['TARGET'].mean()
+#     test[preffix + col] = 0
+#     test.set_index(col, inplace=True)
+#     test.iloc[:, -1] = enc
+#     test.reset_index(inplace=True)
+#
+#
+# def do_cat_target_enc(train, test, cols, preffix='target_mean_', params=None):
+#     params['n_splits'] = 5
+#     params['random_state'] = 42
+#     params['shuffle'] = True
+#     skf = StratifiedKFold(**params)
+#
+#     new_train = train[cols].copy(deep=True)
+#     new_test = test[cols].copy(deep=True)
+#     new_cols = []
+#     for col in cols:
+#         for_target_enc(col, new_train, new_test, preffix, skf)
+#         new_cols.append(preffix + col)
+#     return [new_train, new_test, new_cols]
+#
+#
+# def do_cat_target_enc_multi(train, test, cols, preffix='target_mean_multi_', params=None):
+#     cat_comb = list(combinations(cols, 2))
+#     new_train = train[cols].copy(deep=True)
+#     new_test = test[cols].copy(deep=True)
+#     comb_cols = []
+#
+#     for c1, c2 in cat_comb:
+#         new_train[preffix + f'{c1}-{c2}'] = new_train[c1] + new_train[c2]
+#         new_test[preffix + f'{c1}-{c2}'] = new_test[c1] + new_test[c2]
+#         comb_cols.append(preffix + f'{c1}-{c2}')
+#
+#     pool = Pool(10)
+#     pool.map(for_target_enc, comb_cols)
+#     pool.close()
+#     return [new_train, new_test, comb_cols]
+#
+
+# -----------------------------------------------------
 
 def do_cat_ohe(df, cols, preffix='ohe_', params=None):
     oh_enc = OneHotEncoder(**params, handle_unknown='ignore', sparse=False)
