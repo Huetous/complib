@@ -174,6 +174,22 @@ class huetousXGB(BaseEstimator):
 
 
 # -------------------------------------------------------------------------------------
+cat_params = {
+    # verbose: N - every N iters show log
+    # more iters (default=1000)
+    #
+    # cat_features_names = X.columns # here we specify names of categorical features
+    # cat_features = [X.columns.get_loc(col) for col in cat_features_names]
+    # cat(cat_features)
+    #
+    # 'early_stopping_rounds': 200, if metric doesn`t improve for N rounds than stop training
+    # we dont need to wait all 1000
+    #
+    # faster trainig
+    # 'task_type': 'GPU',
+    # 'border_count': 32,
+    # use_best_model=True
+}
 class huetousCatBoost():
     def __init__(self, params=None, task='regression'):
         if task == 'regression':

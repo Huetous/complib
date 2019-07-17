@@ -38,6 +38,7 @@ def do_feat_boruta(model, X_tr, y_tr):
 
 # --------------------------------------------------------------------------------------------
 def do_feat_pca(df, threshold):
+    print('PCA requires feature values to be standardised. Are they?))))')
     pca = PCA().fit_transform(df)
     explained_variance = 0.0
     components = 0
