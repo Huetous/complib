@@ -1,5 +1,6 @@
 import numpy as np
 
+
 # ---------------------------------------------------------------------------
 def fast_auc(y_true, y_prob):
     y_true = np.asarray(y_true)
@@ -15,5 +16,5 @@ def fast_auc(y_true, y_prob):
     return auc
 
 
-def eval_auc(y_true, y_pred):
-    return 'auc', fast_auc(y_true, y_pred), True
+def eval_auc(y_true, y_prob):
+    return 'auc', fast_auc(y_true, y_prob), True

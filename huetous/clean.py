@@ -30,10 +30,6 @@ def do_fillna_meanstd(df, col, astype=np.int16):
     return df[col].astype(astype)
 
 
-def do_mapping(df, col, map_, astype=np.int16):
-    return df[col].map(map_).astype(astype)
-
-
 # ------------------------------------------------------------------------------------------------------
 def do_reduce_memory_usage(df):
     numerics = ['int16', 'int32', 'int64', 'float16', 'float32', 'float64']
@@ -43,6 +39,7 @@ def do_reduce_memory_usage(df):
         if col_type in numerics:
             c_min = df[col].min()
             c_max = df[col].max()
+            print(c_min, c_max)
             if str(col_type)[:3] == 'int':
                 if c_min > np.iinfo(np.int8).min and c_max < np.iinfo(np.int8).max:
                     df[col] = df[col].astype(np.int8)
@@ -63,56 +60,6 @@ def do_reduce_memory_usage(df):
     print('Mem. usage decreased to {:5.2f} Mb ({:.1f}% reduction)'.format(end_mem, 100 * (
             start_mem - end_mem) / start_mem))
 
-
-# ------------------------------------------------------------------------------------------------------
-# def do_find_collinear(df, threshold=0.99, do_ohe=False, drop=False):
-#     if do_ohe:
-#         corr_matrix = pd.get_dummies(df).corr()
-#     else:
-#         corr_matrix = df.corr()
-#
-#     upper = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(np.bool))
-#     to_drop = [column for column in upper.columns if any(upper[column].abs() > threshold)]
-#
-#     record_collinear = pd.DataFrame(columns=['drop_feature', 'corr_feature', 'corr_value'])
-#     for column in to_drop:
-#         corr_features = list(upper.index[upper[column].abs() > threshold])
-#         corr_values = list(upper[column][upper[column].abs() > threshold])
-#         drop_features = [column for _ in range(len(corr_features))]
-#
-#         temp_df = pd.DataFrame.from_dict({'drop_feature': drop_features,
-#                                           'corr_feature': corr_features,
-#                                           'corr_value': corr_values})
-#         record_collinear = record_collinear.append(temp_df, ignore_index=True)
-#
-#     corr_matrix_plot = corr_matrix.loc[list(set(record_collinear['corr_feature'])),
-#                                        list(set(record_collinear['drop_feature']))]
-#
-#     print(record_collinear)
-#     #
-#     # f, ax = plt.subplots(figsize=(10, 8))
-#     # cmap = sns.diverging_palette(220, 10, as_cmap=True)
-#     # _ = sns.heatmap(
-#     #     corr_matrix_plot,
-#     #     cmap=cmap,
-#     #     center=0,
-#     #     square=True,
-#     #     cbar_kws={'shrink': .9},
-#     #     ax=ax,
-#     #     annot=True,
-#     #     linewidths=0.1, vmax=1.0, linecolor='white',
-#     #     annot_kws={'fontsize': 12}
-#     # )
-#     #
-#     # ax.set_yticks([x + 0.5 for x in list(range(corr_matrix_plot.shape[0]))])
-#     # ax.set_yticklabels(list(corr_matrix_plot.index), size=int(160 / corr_matrix_plot.shape[0]))
-#     # ax.set_xticks([x + 0.5 for x in list(range(corr_matrix_plot.shape[1]))])
-#     # ax.set_xticklabels(list(corr_matrix_plot.columns), size=int(160 / corr_matrix_plot.shape[1]))
-#     # plt.show()
-#     if drop:
-#         df = df.drop(to_drop, axis=1)
-#         return df
-#
 
 def do_drop_single_unique(df):
     unique_counts = df.nunique()
@@ -156,10 +103,16 @@ def show_missing_data(df, plot=False):
         plt.show()
 
 
+def get_missing_cols(df, threshold=0.99):
+    percents = (df.isnull().sum() / df.isnull().count()).sort_values(ascending=False)
+    return [index for index in percents.index if percents[index] > threshold]
+
+
 def show_duplicates(df):
-    if len(df[df.duplicated()]) > 0:
-        print('Number of duplicates:', len(df[duplicates]))
-        print(df[duplicates])
+    duplicates = df[df.duplicated()]
+    if len(duplicates) > 0:
+        print('Number of duplicates:', len(duplicates))
+        print(duplicates)
     else:
         print('There is none of duplicates!')
 

@@ -1,10 +1,11 @@
-from sklearn.linear_model import LinearRegression
+
 from tensorflow.python.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.python.keras.preprocessing.text import Tokenizer
 import numpy as np
 from sklearn import model_selection
+
 import pandas as pd
-from sklearn.preprocessing import LabelEncoder, OneHotEncoder, StandardScaler, MinMaxScaler
+from sklearn.preprocessing import LabelEncoder, StandardScaler, MinMaxScaler
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer, HashingVectorizer, FeatureHasher
 from nltk.tokenize import sent_tokenize, word_tokenize
 from nltk.corpus import stopwords
@@ -12,6 +13,7 @@ from sklearn.neighbors import NearestNeighbors
 from sklearn.model_selection import StratifiedKFold
 from itertools import combinations
 from multiprocessing import Pool
+from huetous import clean, mean_target_encoder
 
 
 # General (le,ohe,freq encoding, bining, projection num on categ, transformation num)
@@ -61,7 +63,7 @@ def do_was_missing_cols(df, preffix='was_missing_'):
         new_cols.append(preffix + col)
 
     print('do_was_missing_cols: Done')
-    print('Added' + len(new_cols) + 'new columns.')
+    print('Added', len(new_cols), 'new columns.')
     return [df[new_cols], new_cols]
 
 
@@ -74,7 +76,7 @@ def do_cat_le(df, cols, preffix='le_'):
 
 
 # Same values encodes same categories values in train and test
-def do_cat_le_tr_te(train, test, cols, preffix='train_test_le_'):
+def do_cat_le_tr_te(train, test, cols, preffix='tr_te_le_'):
     le = LabelEncoder()
     new_cols = []
     for col in cols:
@@ -87,16 +89,32 @@ def do_cat_le_tr_te(train, test, cols, preffix='train_test_le_'):
     return [train[new_cols], test[new_cols], new_cols]
 
 
-def do_cat_target_expand_mean(df, cols, target, preffix='target_expand_mean_'):
-    new_cols = []
+def do_cat_mte(df, cols=None, target_col=None, n_splits=3, preffix='mte_'):
+    if cols is None:
+        raise ValueError('Columns for encoding should be specified.')
+    if target_col is None:
+        raise ValueError('Target columns should be specified.')
+
+    mte = mean_target_encoder.TargetEncoderCV(cols=cols, n_splits=n_splits)
+    new_df = mte.fit_transform(df, df[target_col])
     for col in cols:
-        cumsum = df.groupby(col)[target].cumsum() - df[target]
-        cumcnt = df.groupby(col).cumcount()
-        df[preffix + col] = cumsum / cumcnt
+        new_df = new_df.rename(columns={str(col): str(preffix + col)})
+    return [new_df, list(new_df.columns.values)]
 
-        new_cols.append(preffix + col)
 
-    return [df[new_cols], new_cols]
+def do_cat_mte_tr_te(train, test, cols=None, target_col=None, n_splits=3, preffix='mte_tr_te_'):
+    if cols is None:
+        raise ValueError('Columns for encoding should be specified.')
+    if target_col is None:
+        raise ValueError('Target columns should be specified.')
+
+    mte = mean_target_encoder.TargetEncoderCV(cols=cols, n_splits=n_splits)
+    new_train = mte.fit_transform(train, train[target_col])
+    new_test = mte.transform(test)
+    for col in cols:
+        new_train = new_train.rename(columns={str(col): str(preffix + col)})
+        new_test = new_test.rename(columns={str(col): str(preffix + col)})
+    return [new_train, new_test, list(new_train.columns.values)]
 
 
 def do_cat_dummy(df, cols, preffix='dummy_'):
@@ -106,7 +124,7 @@ def do_cat_dummy(df, cols, preffix='dummy_'):
         new_cols.append(preffix + col)
 
     print('do_cat_dummy: Done')
-    print('Added' + len(new_cols) + 'new columns.')
+    print('Added', len(new_cols), 'new columns.')
     return [df[new_cols], new_cols]
 
 
@@ -117,12 +135,17 @@ def do_cat_freq(df, cols, preffix='freq_', params=None):
 # --------------------------------------------------------------------------------------------
 # Numerical
 # --------------------------------------------------------------------------------------------
-def do_num_st_scale(df, cols, preffix='st_scale_'):
+def do_num_z_scale(df, cols, preffix='z_scale_'):
     st_scaler = StandardScaler()
-    return do_cycle(df, cols, preffix, st_scaler.fit_transform, 'do_num_st_scale')
+    new_cols = []
+    for col in cols:
+        df[preffix + col] = st_scaler.fit_transform(df[[col]])
+        new_cols.append(preffix + col)
+    clean.do_reduce_memory_usage(df[new_cols])
+    return [df[new_cols], new_cols]
 
 
-def do_num_minmax_scale(df, cols, preffix='minmax_'):
+def do_num_minmax_scale(df, cols, preffix='minmax_scale_'):
     minmax_scaler = MinMaxScaler()
     return do_cycle(df, cols, preffix, minmax_scaler.fit_transform, 'do_num_minmax_scale')
 
@@ -145,7 +168,7 @@ def do_num_qcut(df, cols, preffix='qcut_', params=None):
 # --------------------------------------------------------------------------------------------
 # Text
 # --------------------------------------------------------------------------------------------
-def do_text_tf_idf(df, cols, preffix='_tfidf_', params=None):
+def do_text_tf_idf(df, cols, preffix='tfidf_', params=None):
     if params is not None:
         tfidf_vect = TfidfVectorizer(**params)
     else:
@@ -154,7 +177,7 @@ def do_text_tf_idf(df, cols, preffix='_tfidf_', params=None):
                     tfidf_vect.fit_transform, 'do_tf_idf')
 
 
-def do_text_cnt_vect(df, cols, preffix='_cnt_vect_', params=None):
+def do_text_cnt_vect(df, cols, preffix='cnt_vect_', params=None):
     if params is not None:
         count_vect = CountVectorizer(**params)
     else:
@@ -163,11 +186,11 @@ def do_text_cnt_vect(df, cols, preffix='_cnt_vect_', params=None):
                     count_vect.fit_transform, 'do_cnt_vect')
 
 
-def do_text_w2vec(df, cols, preffix='_w2vec_', params=None):
+def do_text_w2vec(df, cols, preffix='w2vec_', params=None):
     return False
 
 
-def do_text_hash_vect(df, cols, preffix='_hash_vect_', params=None):
+def do_text_hash_vect(df, cols, preffix='hash_vect_', params=None):
     if params is not None:
         hash_vect = HashingVectorizer(**params)
     else:
@@ -176,11 +199,11 @@ def do_text_hash_vect(df, cols, preffix='_hash_vect_', params=None):
                     hash_vect.fit_transform, 'do_hash_vect')
 
 
-def do_text_feat_hash(df, cols, preffix='_feat_hash_', params=None):
+def do_text_feat_hash(df, cols, preffix='feat_hash_', params=None):
     return False
 
 
-def do_text_tokenize(df, cols, preffix='_token_', params=None):
+def do_text_tokenize(df, cols, preffix='token_', params=None):
     tokenz = Tokenizer(**params)
     return do_cycle(df, cols, preffix,
                     tokenz.sequences_to_matrix, 'do_tokenize')

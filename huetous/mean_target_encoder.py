@@ -1,16 +1,15 @@
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import KFold
-from sklearn.base import BaseEstimator, TransformerMixin
 
 
-class TargetSmoothedEncoder(BaseEstimator, TransformerMixin):
+class TargetSmoothedEncoder:
     def __init__(self, cols=None, alpha=5):
         if isinstance(cols, str):
             self.cols = [cols]
         else:
             self.cols = cols
-        self.alpha = 5
+        self.alpha = alpha
 
     def fit(self, X, y):
         # Encode all categorical cols by default
@@ -26,7 +25,6 @@ class TargetSmoothedEncoder(BaseEstimator, TransformerMixin):
         self.maps = dict()
         for col in self.cols:
             global_mean = X[col].mean()
-
             tmap = dict()
             uniques = X[col].unique()
             for unique in uniques:
@@ -37,8 +35,8 @@ class TargetSmoothedEncoder(BaseEstimator, TransformerMixin):
 
         return self
 
-    def transform(self, X, y=None):
-        res = X.copy()
+    def transform(self, X):
+        res = X[self.cols].copy()
         for col, tmap in self.maps.items():
             vals = np.full(X.shape[0], np.nan)
             for val, mean_target in tmap.items():
@@ -47,15 +45,15 @@ class TargetSmoothedEncoder(BaseEstimator, TransformerMixin):
         return res
 
     def fit_transform(self, X, y=None):
-        return self.fit(X, y).transform(X, y)
+        return self.fit(X, y).transform(X)
 
 
-class TargetEncoderCV(TargetEncoder):
-    def __init__(self, n_splits=3, shuffle=True, cols=None, seed=0):
+class TargetEncoderCV:
+    def __init__(self, cols=None, n_splits=3, shuffle=True, seed=0):
         self.n_splits = n_splits
         self.shuffle = shuffle
+        self.seed = seed
         self.cols = cols
-        self.seed = 0
 
     def fit(self, X, y):
         self.target_encoder = TargetSmoothedEncoder(cols=self.cols).fit(X, y)
@@ -67,9 +65,9 @@ class TargetEncoderCV(TargetEncoder):
             return self.target_encoder.transform(X)
 
         kf = KFold(n_splits=self.n_splits, shuffle=self.shuffle, random_state=self.seed)
-        res = X.copy()
+        res = X[self.cols].copy()
         for tr_idx, val_idx in kf.split(X):
-            te = TargetEncoder(cols=self.cols).fit(X.iloc[tr_idx, :], y.iloc[tr_idx])
+            te = TargetSmoothedEncoder(cols=self.cols).fit(X.iloc[tr_idx, :], y.iloc[tr_idx])
             res.iloc[val_idx, :] = te.transform(X.iloc[val_idx, :])
         return res
 

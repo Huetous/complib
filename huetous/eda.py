@@ -16,7 +16,7 @@ import pandas as pd
 
 # --------------------------------------------------------------------------------------------
 def plot_oof_preds(target, preds, class_name):
-    plot_data =pd.DataFrame()
+    plot_data = pd.DataFrame()
     plot_data['pred'] = preds['pred']
     plot_data['target'] = target
 
@@ -30,12 +30,8 @@ def plot_oof_preds(target, preds, class_name):
 
 
 # --------------------------------------------------------------------------------------------
-def get_columns_by_type(df, ntypes):
-    columns = []
-    for col in df.columns:
-        if df[col].dtype in ntypes:
-            columns.append(col)
-    return columns
+def get_columns_by_type(df, type):
+    return df[df.columns.dtype == type]
 
 
 # --------------------------------------------------------------------------------------------

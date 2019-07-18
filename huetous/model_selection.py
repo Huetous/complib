@@ -1,9 +1,5 @@
 import numpy as np
 from sklearn import model_selection
-from sklearn import feature_selection
-from sklearn.base import clone
-from sklearn import svm, tree, linear_model, neighbors, naive_bayes, ensemble, discriminant_analysis, gaussian_process
-import time
 import matplotlib.pyplot as plt
 import pandas as pd
 import itertools
@@ -49,7 +45,7 @@ def get_best_models_by_corr(predictions, target_col='Target', threshhold=.70):
     index = 0
     corr_sum = 0
     for col in data:
-        if np.corrcoef(data[col], target)[0, 1] > threshhold:
+        if np.abs(np.corrcoef(data[col], target)[0, 1]) > threshhold:
             corr_with_target.loc[index, 'Model Name'] = col
             corr_with_target.loc[index, 'Correlation with target'] = np.corrcoef(data[col], target)[0, 1]
         index += 1
@@ -59,7 +55,7 @@ def get_best_models_by_corr(predictions, target_col='Target', threshhold=.70):
             if model_name == other_model_name:
                 continue
             else:
-                corr_sum += np.corrcoef(data[model_name], data[other_model_name])[0, 1]
+                corr_sum += np.abs(np.corrcoef(data[model_name], data[other_model_name])[0, 1])
         index = corr_with_target[corr_with_target['Model Name'] == model_name].index[0]
         corr_with_target.loc[index, 'Corr. sum with other models'] = corr_sum
         corr_sum = 0
@@ -67,13 +63,14 @@ def get_best_models_by_corr(predictions, target_col='Target', threshhold=.70):
                                  ascending=[False, True], inplace=True)
 
     print(corr_with_target)
-    print('Количество запрошенных моделей: ', corr_with_target.shape[0],'\n')
+    print('Количество запрошенных моделей: ', corr_with_target.shape[0], '\n')
     return corr_with_target['Model Name'].tolist()
+
+
 # --------------------------------------------------------------------------------------------
 def show_confusion_matrix(cm, classes,
-                     normalize=False,
-                     title='Confusion matrix',
-                     cmap=plt.get_cmap('RdBu')):
+                          normalize=False,
+                          cmap=plt.get_cmap('RdBu')):
     if normalize:
         cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
         print("Normalized confusion matrix")
@@ -83,7 +80,7 @@ def show_confusion_matrix(cm, classes,
     print(cm)
 
     plt.imshow(cm, interpolation='nearest', cmap=cmap)
-    plt.title(title)
+    plt.title('Confusion matrix')
     plt.colorbar()
     tick_marks = np.arange(len(classes))
     plt.xticks(tick_marks, classes, rotation=45)
@@ -99,6 +96,7 @@ def show_confusion_matrix(cm, classes,
     plt.tight_layout()
     plt.ylabel('True label')
     plt.xlabel('Predicted label')
+
 
 # --------------------------------------------------------------------------------------------
 def do_models_eval(models, X, y, cv_split=None, graph=False):

@@ -16,13 +16,12 @@ def load_pickle(filename):
 
 
 def ensemble_data(pickle_list):
-    ensembled_data = pd.DataFrame()
-    cols = []
+    ensembled_data, ensembled_cols = load_pickle(pickle_list[0])
     for filename in pickle_list:
+        if filename == pickle_list[0]:
+            continue
         data, cols = load_pickle(filename)
-        ensembled_data = np.concatenate([ensembled_data, data], axis=1)
-        cols.append(cols)
-    return ensembled_data, np.array(cols).reshape(-1,)
-
-
-
+        ensembled_data = np.hstack((ensembled_data, data))
+        for col in cols:
+            ensembled_cols.append(col)
+    return pd.DataFrame(ensembled_data, columns=ensembled_cols), ensembled_cols

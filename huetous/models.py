@@ -17,7 +17,7 @@ from catboost import CatBoostRegressor, CatBoostClassifier
 from sklearn.base import clone
 from sklearn.base import BaseEstimator
 from sklearn.base import RegressorMixin, ClassifierMixin
-from huetous.utils import eval_auc
+from huetous.metrics import eval_auc
 
 plotly.tools.set_credentials_file(username='daddudota3', api_key='PjqulG0oXHlrVgWexu2q')
 
@@ -33,31 +33,6 @@ plotly.tools.set_credentials_file(username='daddudota3', api_key='PjqulG0oXHlrVg
 # Exotic (FM/FFM)
 
 # -------------------------------------------------------------------------------------
-class metaModel():
-    def __init__(self, model, params=None, metric=None):
-        self.model = clone(model(**params), safe=False)
-        self.metric = metric
-
-    def train(self, X_train, y_train):
-        self.model.train(X_train, y_train)
-
-    def predict(self, X):
-        return self.model.predict(X)
-
-    def set_params(self, params):
-        self.model.set_params(params)
-
-    def get_params(self):
-        return self.model.get_params()
-
-    def predict_proba(self, X):
-        return self.model.predict_proba(X)
-
-    def get_score(self, y_pred, y_true):
-        return self.metric(y_true, y_pred)
-
-
-# -------------------------------------------------------------------------------------
 class huetousSklearn():
     def __init__(self, model, seed=0, params=None):
         params['random_state'] = seed
@@ -69,9 +44,8 @@ class huetousSklearn():
     def predict(self, x):
         return self.model.predict(x)
 
-    #
-    # def fit(self, x, y):
-    #     return self.model.fit(x, y)
+    def fit(self, x, y):
+        return self.model.fit(x, y)
 
     def feature_importances(self, x, y):
         self.feature = self.model.fit(x, y).feature_importances_.tolist()
@@ -111,12 +85,18 @@ class huetousSklearn():
 class huetousLGB(BaseEstimator):
     def __init__(self, params=None, task='regression', eval_metric=None):
         if task == 'regression':
-            self.model = lgb.LGBMRegressor(**params)
+            if params is not None:
+                self.model = lgb.LGBMRegressor(**params,n_jobs=-1)
+            else:
+                self.model = lgb.LGBMRegressor(n_jobs=-1)
             if eval_metric is None:
                 self.eval_metric = 'mae'
         else:
-            self.model = lgb.LGBMClassifier(**params, n_jobs=-1)
-            self.eval_metric = eval_auc
+            if params is not None:
+                self.model = lgb.LGBMClassifier(**params, n_jobs=-1)
+            else:
+                self.model = lgb.LGBMClassifier(n_jobs=-1)
+        self.eval_metric = eval_auc
 
     def train(self, X_tr, y_tr, X_val, y_val):
         self.X_tr_columns = X_tr.columns
@@ -150,6 +130,7 @@ class huetousXGB(BaseEstimator):
         self.model = None
 
     def fit(self, X_tr, y_tr, X_val=None, y_val=None):
+        self.X_tr_columns = X_tr.columns
         dtrain = xgb.DMatrix(data=X_tr, label=y_tr, feature_names=X_tr.columns)
         if X_val is not None:
             dval = xgb.DMatrix(data=X_val, label=y_val, feature_names=X_val.columns)
@@ -172,6 +153,12 @@ class huetousXGB(BaseEstimator):
         preds = self.model.predict(dtest, ntree_limit=self.model.best_ntree_limit)
         return preds
 
+    def feature_importances(self):
+        feature_importance = pd.DataFrame()
+        feature_importance["feature"] = self.X_tr_columns
+        feature_importance["importance"] = self.model.feature_importances_
+        return feature_importance
+
 
 # -------------------------------------------------------------------------------------
 cat_params = {
@@ -190,6 +177,8 @@ cat_params = {
     # 'border_count': 32,
     # use_best_model=True
 }
+
+
 class huetousCatBoost():
     def __init__(self, params=None, task='regression'):
         if task == 'regression':
@@ -248,41 +237,3 @@ def do_sep_models_train(model, params, X_tr, y_tr, X_te, target_name, type):
 
     return [S_train, S_test]
 
-
-# Simple algo
-# df
-# test
-# num_val
-# val = df[:num_val]
-# train = df[num_val:]
-#
-# model.fit(train)
-# val_score = model.evaluate(val)
-#
-# model.fit(np.concatenate([train,val]))
-# test_score = model.evaluate(test)
-
-# Regul
-# from keras import regularizers
-# model.add(layers.Dense(32, kernel_regularizer=regularizers.l2(0.001))
-# Every coefficient in weight matrix will add 0.001*weight_coef_value
-# in general value of loss
-
-def conv2d_bin(input_shape=(150, 150, 3)):
-    model = models.Sequential()
-    model.add(layers.Conv2D(32, (3, 3), activation='relu', input_shape=input_shape))
-    model.add(layers.MaxPooling2D((2, 2)))
-    model.add(layers.Conv2D(64, (3, 3), activation='relu'))
-    model.add(layers.MaxPooling2D((2, 2)))
-    model.add(layers.Conv2D(128, (3, 3), activation='relu'))
-    model.add(layers.MaxPooling2D((2, 2)))
-    model.add(layers.Conv2D(128, (3, 3), activation='relu'))
-    model.add(layers.MaxPooling2D((2, 2)))
-    model.add(layers.Flatten())
-    model.add(layers.Dropout(0.5))
-    model.add(layers.Dense(512, activation='relu'))
-    model.add(layers.Dense(1, activation='sigmoid'))
-    model.compile(loss='binary_crossentropy',
-                  optimizer='rmsprop',
-                  metrics=['acc'])
-    return model
