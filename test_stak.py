@@ -1,6 +1,8 @@
 from sklearn.datasets import load_boston
 from sklearn.model_selection import train_test_split
 from xgboost import XGBRegressor
+from lightgbm import LGBMClassifier
+from catboost import CatBoostClassifier
 from sklearn import svm, tree, linear_model, neighbors, naive_bayes, ensemble, discriminant_analysis, gaussian_process
 from sklearn import model_selection
 from huetous.ensemble import ensemble as ens
