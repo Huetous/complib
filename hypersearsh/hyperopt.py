@@ -101,8 +101,9 @@ class HyperLGB:
         for parameter_name in ['num_leaves', 'subsample_for_bin', 'min_child_samples']:
             hypers[parameter_name] = int(hypers[parameter_name])
 
+        dtrain = lightgbm.Dataset(data=self.X_tr,label=self.y_tr)
         start = timer()
-        cv_results = lightgbm.cv(hypers, self.X_tr,
+        cv_results = lightgbm.cv(hypers, dtrain,
                                  nfold=N_FOLDS, seed=self.seed,
                                  num_boost_round=10000,
                                  early_stopping_rounds=100, metrics='auc')

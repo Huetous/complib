@@ -16,5 +16,9 @@ def fast_auc(y_true, y_prob):
     return auc
 
 
-def eval_auc(y_true, y_prob):
-    return 'auc', fast_auc(y_true, y_prob), True
+def eval_auc(y_true, y_pred):
+    return 'auc', fast_auc(y_true, y_pred), True
+
+def group_mean_log_mae(y_true, y_pred, types, floor=1e-9):
+    maes = (y_true-y_pred).abs().groupby(types).mean()
+    return np.log(maes.map(lambda x: max(x, floor))).mean()

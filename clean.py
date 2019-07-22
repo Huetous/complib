@@ -97,11 +97,11 @@ def get_cols_with_null(df, threshold=0.99):
 
 # ------------------------------------------------------------------------------------------------------
 def show_cols_with_null(df):
-    percents = df.isnull().sum() / df.isnull().count()
+    percents = (df.isnull().sum() / df.isnull().count()).sort_values(ascending=False)
     print('Missing data')
     for index in percents.index:
         if percents[index] != 0:
-            print('{} : {:.5f}%'.format(index, percents[index]))
+            print('{} : {:.5f}'.format(index, percents[index]))
 
 
 def show_skewed(df):

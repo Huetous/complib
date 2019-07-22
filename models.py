@@ -1,4 +1,3 @@
-from xgboost import XGBRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error, accuracy_score
 from tensorflow.python.keras import models, layers
 import numpy as np
@@ -13,14 +12,15 @@ import pandas as pd
 import lightgbm as lgb
 import xgboost as xgb
 from sklearn.linear_model import RidgeCV
-from catboost import CatBoostRegressor, CatBoostClassifier
+import catboost as cat
 from sklearn.base import clone
 from sklearn.base import BaseEstimator
 from sklearn.base import RegressorMixin, ClassifierMixin
-from huetous.metrics import eval_auc
+from huelib.metrics import eval_auc
+import gc
+import time
 
 plotly.tools.set_credentials_file(username='daddudota3', api_key='PjqulG0oXHlrVgWexu2q')
-
 
 # class huetousLinear():
 
@@ -30,79 +30,102 @@ plotly.tools.set_credentials_file(username='daddudota3', api_key='PjqulG0oXHlrVg
 # Exotic (FM/FFM)
 
 # -------------------------------------------------------------------------------------
-class HueLGB:
-    def __init__(self, params=None, task='regression', eval_metric=None):
-        if task == 'regression':
-            if params is not None:
-                self.model = lgb.LGBMRegressor(**params, n_jobs=-1)
-            else:
-                self.model = lgb.LGBMRegressor(n_jobs=-1)
-            if eval_metric is None:
-                self.eval_metric = 'mae'
-        else:
-            if params is not None:
-                self.model = lgb.LGBMClassifier(**params, n_jobs=-1)
-            else:
-                self.model = lgb.LGBMClassifier(n_jobs=-1)
-            if eval_metric is None:
-                self.eval_metric = eval_auc
+base_lgb_params = {
+    # regression, huber, binary, multiclass, xentropy
+    'objective': 'regression',
 
-    def train(self, X_tr, y_tr, X_val, y_val):
-        self.X_tr_columns = X_tr.columns
+    # mae, mse, rmse, huber, auc, binary_logloss,
+    # multi_logloss, binary_error, multi_error, cross_entropy,
+    'metric': 'rmse',
 
+    # Used in binary classification
+    # weight of labels with positive class
+    # 'scale_pos_weight': 1,
+}
+
+# class HuetousLowLGB (train, Dataset, cv)
+# class HuetousLGB (fit, X,y)
+
+class HuetousLGB(BaseEstimator):
+    def __init__(self, params, task='reg', eval_metric='mae', need_proba=False,
+                 n_est=5000, early_stopping_rounds=200,
+                 verbose=500, n_fold=5):
+        if task is 'reg':
+            self.model = lgb.LGBMRegressor(**params, n_estimators=n_est, n_jobs=-1)
+            self.eval_metric = eval_metric
+        elif task is 'clf':
+            self.model = lgb.LGBMClassifier(**params, n_estimators=n_est, n_jobs=-1)
+            self.eval_metric = eval_auc
+        self.task = task
+        self.verbose = verbose
+        self.early_stopping_rounds = early_stopping_rounds
+        self.need_proba = need_proba
+        self.n_fold = n_fold
+
+    def fit(self, X_tr, y_tr, X_val, y_val):
+        self.columns = X_tr.columns
         self.model.fit(X_tr, y_tr,
                        eval_set=[(X_tr, y_tr), (X_val, y_val)],
                        eval_metric=self.eval_metric,
-                       verbose=10000,
-                       early_stopping_rounds=200)
+                       verbose=self.verbose,
+                       early_stopping_rounds=self.early_stopping_rounds)
 
     def predict(self, X):
-        return self.model.predict(X, self.model.best_iteration_)
+        if self.task is 'reg':
+            return self.model.predict(X, num_iteration=self.model.best_iteration_)
+        elif self.task is 'clf':
+            if self.need_proba is True:
+                return self.model.predict_proba(X, num_iteration=self.model.best_iteration_)[:, 1]
+            else:
+                return self.model.predict(X, num_iteration=self.model.best_iteration_)
 
     def feature_importance(self):
         feature_importance = pd.DataFrame()
-        feature_importance["feature"] = self.X_tr_columns
+        feature_importance["feature"] = self.columns
         feature_importance["importance"] = self.model.feature_importances_
-        return feature_importance
+        cols = feature_importance[["feature", "importance"]].groupby("feature").mean().sort_values(
+            by="importance", ascending=False)[:50].index
+        best_features = feature_importance.loc[feature_importance.feature.isin(cols)]
+        sns.barplot(x="importance", y="feature", data=best_features.sort_values(by="importance", ascending=False))
+        plt.show()
+
+    # def add_feature_importance(self, fold_feature_importance):
+    #     self.feature_importance = np.stack[self.feature_importance, fold_feature_importance]
+    #
+    # def get_feature_importance(self):
+    #     return self.feature_importance / self.n_fold
 
 
-# -------------------------------------------------------------------------------------
-class HueXGB:
-    def __init__(self, params=None, num_rounds=50,
-                 early_stopping_rounds=None, verbose_eval=True):
+class HuetousXGB(BaseEstimator):
+    def __init__(self, params, task='reg', need_proba=False,
+                 n_est=5000, early_stopping_rounds=200,
+                 verbose=500):
+        # if task is 'reg':
+        #     self.eval_metric = eval_metric
+        # elif task is 'clf':
+        #     self.eval_metric = eval_metric
+        self.verbose = verbose
+        self.early_stopping_rounds = early_stopping_rounds
+
         self.params = params
-        self.num_rounds = num_rounds
-        self.early_stopping_round = early_stopping_rounds
-        self.verbose_eval = verbose_eval
-        self.model = None
+        self.n_est = n_est
+        self.need_proba = need_proba
 
     def fit(self, X_tr, y_tr, X_val, y_val):
-        self.X_tr_columns = X_tr.columns
+        dtrain = xgb.DMatrix(data=X_tr, label=y_tr)
+        dval = xgb.DMatrix(data=X_val, label=y_val)
 
-        dtrain = xgb.DMatrix(data=X_tr, label=y_tr, feature_names=X_tr.columns)
-        dval = xgb.DMatrix(data=X_val, label=y_val, feature_names=X_val.columns)
         watchlist = [(dtrain, 'train'), (dval, 'val')]
-
-        self.model = xgb.train(params=self.params,
-                               dtrain=dtrain,
-                               num_boost_round=self.num_rounds,
-                               early_stopping_rounds=self.early_stopping_round,
-                               evals=watchlist,
-                               verbose_eval=self.verbose_eval)
-        return self
+        self.model = xgb.train(dtrain=dtrain,
+                               num_boost_round=self.n_est, evals=watchlist,
+                               early_stopping_rounds=self.early_stopping_rounds,
+                               verbose_eval=self.verbose, params=self.params)
 
     def predict(self, X):
-        dtest = xgb.DMatrix(X, feature_names=X.columns)
+        dtest = xgb.DMatrix(data=X)
         return self.model.predict(dtest, ntree_limit=self.model.best_ntree_limit)
 
-    def feature_importance(self):
-        feature_importance = pd.DataFrame()
-        feature_importance["feature"] = self.X_tr_columns
-        feature_importance["importance"] = self.model.feature_importances_
-        return feature_importance
 
-
-# -------------------------------------------------------------------------------------
 cat_params = {
     # verbose: N - every N iters show log
     # more iters (default=1000)
@@ -121,20 +144,20 @@ cat_params = {
 }
 
 
-class HueCatBoost:
-    def __init__(self, params=None, task='regression'):
-        if task == 'regression':
-            if params is not None:
-                self.model = CatBoostRegressor(**params, eval_metric='MAE')
-            else:
-                self.model = CatBoostRegressor(eval_metric='MAE')
-        else:
-            if params is not None:
-                self.model = CatBoostClassifier(**params, eval_metric='AUC')
-            else:
-                self.model = CatBoostClassifier(eval_metric='AUC')
+class HuetousCatBoost(BaseEstimator):
+    def __init__(self, params, task='reg', eval_metric='MAE',
+                 n_est=5000, early_stopping_rounds=200,
+                 verbose=500):
+        if task is 'reg':
+            self.model = cat.CatBoostRegressor(**params, iterations=n_est,
+                                               early_stopping_rounds=early_stopping_rounds,
+                                               verbose=verbose)
+        elif task is 'clf':
+            self.model = cat.CatBoostClassifier(**params, iterations=n_est,
+                                                early_stopping_rounds=early_stopping_rounds,
+                                                verbose=verbose)
 
-    def train(self, X_tr, y_tr, X_val, y_val):
+    def fit(self, X_tr, y_tr, X_val, y_val):
         self.model.fit(X_tr, y_tr,
                        eval_set=(X_val, y_val),
                        cat_features=[],

@@ -5,6 +5,7 @@ import pandas as pd
 import itertools
 import seaborn as sns
 from tqdm import tqdm
+import time
 
 
 # --------------------------------------------------------------------------------------------
@@ -40,7 +41,7 @@ def get_best_models_by_corr(predictions, target_col='Target', threshhold=.70):
 
 
 # --------------------------------------------------------------------------------------------
-def confusion_matrix(cm, classes,normalize=False, cmap=plt.get_cmap('RdBu')):
+def show_confusion_matrix(cm, classes, normalize=False, cmap=plt.get_cmap('RdBu')):
     if normalize:
         cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
         print("Normalized confusion matrix")
@@ -69,45 +70,59 @@ def confusion_matrix(cm, classes,normalize=False, cmap=plt.get_cmap('RdBu')):
 
 
 # --------------------------------------------------------------------------------------------
-def cross_validate(models, X_tr, y_tr, X_val, y_te,
-                   cv_scheme='kf', n_splits=3, shuffle=False, seed=0,
-                   plot=False):
-    if cv_scheme not in ['kf', 'skf']:
+def get_hue_oof(model, X, y, X_test,
+                cv_scheme, n_splits, shuffle, seed,
+                metric):
+
+    # -------------------------------------
+    # Specify CV scheme
+    # -------------------------------------
+    if cv_scheme not in ['kf', 'skf', 'ts']:
         raise ValueError('Parameter <cv_scheme> incorrectly specified.')
     else:
         if cv_scheme is 'kf':
             cv_split = model_selection.KFold(n_splits=n_splits, shuffle=shuffle, random_state=seed)
-        else:
+        elif cv_scheme is 'skf':
             cv_split = model_selection.StratifiedKFold(n_splits=n_splits, shuffle=shuffle, random_state=seed)
+        else:
+            cv_split = model_selection.TimeSeriesSplit(n_splits=n_splits)
 
-    cols = ['Model', 'Train Acc Mean', 'Train Acc 3*std', 'Test Acc Mean', 'Test Acc 3*std', 'Fit Time']
-    compare = pd.DataFrame(columns=cols)
-    preds = pd.DataFrame()
-    preds['Target'] = y_te
+    # -------------------------------------
+    # S_train - oof, S_test - pred
+    # -------------------------------------
+    S_train = np.zeros((X.shape[0],))
+    S_test = np.zeros((X_test.shape[0],))
+    S_test_tmp = np.empty((n_splits, X_test.shape[0]))
 
-    row_index = 0
-    for (name, model) in tqdm(models):
-        model_name = model.__class__.__name__
-        compare.loc[row_index, 'Model'] = model_name
+    # -------------------------------------
+    # Scores for each fold
+    # -------------------------------------
+    scores = []
 
-        cv_res = model_selection.cross_validate(model, X_tr, y_tr, cv=cv_split)
+    # -------------------------------------
+    # Loop for fold
+    # -------------------------------------
+    for i, (tr_idx, val_idx) in enumerate(cv_split.split(X)):
+        if type(X) == np.ndarray:
+            X_tr, X_val = X[tr_idx], X[val_idx]
+            y_tr, y_val = y[tr_idx], y[val_idx]
+        else:
+            X_tr, X_val = X.iloc[tr_idx], X.iloc[val_idx]
+            y_tr, y_val = y.iloc[tr_idx], y.iloc[val_idx]
 
-        compare.loc[row_index, 'Train Acc Mean'] = cv_res['train_score'].mean()
-        compare.loc[row_index, 'Train Acc 3*std'] = cv_res['train_score'].std() * 3
+        model.fit(X_tr, y_tr, X_val, y_val)
+        y_pred = model.predict(X_val)
 
-        compare.loc[row_index, 'Test Acc Mean'] = cv_res['test_score'].mean()
-        compare.loc[row_index, 'Test Acc 3*std'] = cv_res['test_score'].std() * 3
+        score = metric(y_val, y_pred)
+        scores.append(score)
+        # print('Fold №', i, ', score:', score)
 
-        compare.loc[row_index, 'Fit Time'] = cv_res['fit_time'].mean()
+        S_train[val_idx] = y_pred
+        S_test_tmp[i, :] = model.predict(X_test)
 
-        model.fit(X_tr, y_tr)
-        preds[model_name] = model.predict(X_val)
-        row_index += 1
-    compare.sort_values(by=['Test Acc Mean'], ascending=False, inplace=True)
+    print('='*60)
+    print('CV mean:', np.mean(scores), ', std:', np.std(scores))
+    S_test[:] = S_test_tmp.mean(axis=0)
+    return S_train.reshape(-1, 1), S_test.reshape(-1, 1)
 
-    if plot:
-        _, ax = plt.subplots(figsize=(12, 6))
-        _ = sns.barplot(x='Test Acc Mean', y='Model', data=compare)
-        plt.show()
-    return compare, preds
 # --------------------------------------------------------------------------------------------
