@@ -11,7 +11,7 @@ from nltk.corpus import stopwords
 from sklearn.neighbors import NearestNeighbors
 from itertools import combinations
 from multiprocessing import Pool
-from huetous import clean, mean_target_encoder
+from huelib import clean, mean_target_encoder
 
 
 # General (le,ohe,freq encoding, bining, projection num on categ, transformation num)

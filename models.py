@@ -11,11 +11,9 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import lightgbm as lgb
 import xgboost as xgb
-from sklearn.linear_model import RidgeCV
 import catboost as cat
 from sklearn.base import clone
 from sklearn.base import BaseEstimator
-from sklearn.base import RegressorMixin, ClassifierMixin
 from huelib.metrics import eval_auc
 import gc
 import time
@@ -43,26 +41,36 @@ base_lgb_params = {
     # 'scale_pos_weight': 1,
 }
 
-
-# class HuetousLowLGB (train, Dataset, cv)
-# class HuetousLGB (fit, X,y)
+lgb_params = {'num_leaves': 256,
+              'min_child_samples': 79,
+              'objective': 'binary',
+              'max_depth': 13,
+              'learning_rate': 0.03,
+              "subsample_freq": 3,
+              "subsample": 0.9,
+              "bagging_seed": 11,
+              "metric": 'auc',
+              "verbosity": -1,
+              'reg_alpha': 0.3,
+              'reg_lambda': 0.3,
+              'colsample_bytree': 0.9
+              }
 
 
 class HuetousLGB(BaseEstimator):
     def __init__(self, params, task='reg', eval_metric='mae', need_proba=False,
-                 n_est=5000, early_stopping_rounds=200,
-                 verbose=500, n_fold=5):
+                 n_estimators=5000, early_stopping_rounds=200,
+                 verbose=500):
         if task is 'reg':
-            self.model = lgb.LGBMRegressor(**params, n_estimators=n_est, n_jobs=-1)
+            self.model = lgb.LGBMRegressor(**params, n_estimators=n_estimators, n_jobs=-1)
             self.eval_metric = eval_metric
         elif task is 'clf':
-            self.model = lgb.LGBMClassifier(**params, n_estimators=n_est, n_jobs=-1)
+            self.model = lgb.LGBMClassifier(**params, n_estimators=n_estimators, n_jobs=-1)
             self.eval_metric = eval_auc
         self.task = task
         self.verbose = verbose
         self.early_stopping_rounds = early_stopping_rounds
         self.need_proba = need_proba
-        self.n_fold = n_fold
 
     def fit(self, X_tr, y_tr, X_val, y_val):
         self.columns = X_tr.columns
@@ -91,40 +99,29 @@ class HuetousLGB(BaseEstimator):
         sns.barplot(x="importance", y="feature", data=best_features.sort_values(by="importance", ascending=False))
         plt.show()
 
-    # def add_feature_importance(self, fold_feature_importance):
-    #     self.feature_importance = np.stack[self.feature_importance, fold_feature_importance]
-    #
-    # def get_feature_importance(self):
-    #     return self.feature_importance / self.n_fold
 
 
 class HuetousXGB(BaseEstimator):
-    def __init__(self, params, task='reg', need_proba=False,
-                 n_est=5000, early_stopping_rounds=200,
+    def __init__(self, params,
+                 num_boost_round=5000, early_stopping_rounds=200,
                  verbose=500):
-        # if task is 'reg':
-        #     self.eval_metric = eval_metric
-        # elif task is 'clf':
-        #     self.eval_metric = eval_metric
         self.verbose = verbose
         self.early_stopping_rounds = early_stopping_rounds
-
         self.params = params
-        self.n_est = n_est
-        self.need_proba = need_proba
+        self.num_boost_round = num_boost_round
 
     def fit(self, X_tr, y_tr, X_val, y_val):
-        dtrain = xgb.DMatrix(data=X_tr, label=y_tr)
-        dval = xgb.DMatrix(data=X_val, label=y_val)
+        dtrain = xgb.DMatrix(data=X_tr, label=y_tr, feature_names=X_tr.columns)
+        dval = xgb.DMatrix(data=X_val, label=y_val, feature_names=X_tr.columns)
 
         watchlist = [(dtrain, 'train'), (dval, 'val')]
         self.model = xgb.train(dtrain=dtrain,
-                               num_boost_round=self.n_est, evals=watchlist,
+                               num_boost_round=self.num_boost_round, evals=watchlist,
                                early_stopping_rounds=self.early_stopping_rounds,
                                verbose_eval=self.verbose, params=self.params)
 
     def predict(self, X):
-        dtest = xgb.DMatrix(data=X)
+        dtest = xgb.DMatrix(data=X, feature_names=X.columns)
         return self.model.predict(dtest, ntree_limit=self.model.best_ntree_limit)
 
 
@@ -148,23 +145,27 @@ cat_params = {
 
 class HuetousCatBoost(BaseEstimator):
     def __init__(self, params, task='reg', eval_metric='MAE',
-                 n_est=5000, early_stopping_rounds=200,
+                 iterations=5000, early_stopping_rounds=200,
                  verbose=500):
         if task is 'reg':
-            self.model = cat.CatBoostRegressor(**params, iterations=n_est,
+            self.model = cat.CatBoostRegressor(**params, iterations=iterations,
                                                early_stopping_rounds=early_stopping_rounds,
+                                               eval_metric=eval_metric,
+                                               # loss_function=eval_metric,
                                                verbose=verbose)
         elif task is 'clf':
-            self.model = cat.CatBoostClassifier(**params, iterations=n_est,
+            self.model = cat.CatBoostClassifier(**params, iterations=iterations,
                                                 early_stopping_rounds=early_stopping_rounds,
+                                                eval_metric=eval_metric,
+                                                # loss_function=eval_metric,
                                                 verbose=verbose)
-
+        self.verbose =verbose
     def fit(self, X_tr, y_tr, X_val, y_val):
         self.model.fit(X_tr, y_tr,
                        eval_set=(X_val, y_val),
                        cat_features=[],
                        use_best_model=True,
-                       verbose=False)
+                       verbose=self.verbose)
 
     def predict(self, X):
         return self.model.predict(X)

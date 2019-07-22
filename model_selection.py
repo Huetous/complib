@@ -6,6 +6,7 @@ import itertools
 import seaborn as sns
 from tqdm import tqdm
 import time
+from sklearn.metrics import mean_absolute_error
 
 
 # --------------------------------------------------------------------------------------------
@@ -71,9 +72,8 @@ def show_confusion_matrix(cm, classes, normalize=False, cmap=plt.get_cmap('RdBu'
 
 # --------------------------------------------------------------------------------------------
 def get_hue_oof(model, X, y, X_test,
-                cv_scheme, n_splits, shuffle, seed,
-                metric):
-
+                cv_scheme='kf', n_splits=5, shuffle=False, seed=0,
+                metrics=[('mae', mean_absolute_error)]):
     # -------------------------------------
     # Specify CV scheme
     # -------------------------------------
@@ -97,31 +97,31 @@ def get_hue_oof(model, X, y, X_test,
     # -------------------------------------
     # Scores for each fold
     # -------------------------------------
-    scores = []
-
+    scores = dict()
+    columns = X.columns
     # -------------------------------------
     # Loop for fold
     # -------------------------------------
-    for i, (tr_idx, val_idx) in enumerate(cv_split.split(X)):
-        if type(X) == np.ndarray:
-            X_tr, X_val = X[tr_idx], X[val_idx]
+    for fold_n, (tr_idx, val_idx) in enumerate(cv_split.split(X)):
+        if type(X) is np.ndarray:
+            X_tr, X_val = X[columns][tr_idx], X[columns][val_idx]
             y_tr, y_val = y[tr_idx], y[val_idx]
         else:
-            X_tr, X_val = X.iloc[tr_idx], X.iloc[val_idx]
-            y_tr, y_val = y.iloc[tr_idx], y.iloc[val_idx]
+            X_tr, X_val = X[columns].iloc[tr_idx], X[columns].iloc[val_idx]
+            y_tr, y_val = y[tr_idx], y[val_idx]
 
         model.fit(X_tr, y_tr, X_val, y_val)
         y_pred = model.predict(X_val)
 
-        score = metric(y_val, y_pred)
-        scores.append(score)
-        # print('Fold №', i, ', score:', score)
+        for (metric_name, metric) in metrics:
+            scores[metric_name] = metric(y_val, y_pred)
 
-        S_train[val_idx] = y_pred
-        S_test_tmp[i, :] = model.predict(X_test)
+        S_train[val_idx] = y_pred.ravel()
+        S_test_tmp[fold_n, :] = model.predict(X_test)
 
-    print('='*60)
-    print('CV mean:', np.mean(scores), ', std:', np.std(scores))
+    print('=' * 60)
+    for metric in scores.keys():
+        print(f'[{metric}]\t','CV mean:', np.mean(scores[metric]), ', std:', np.std(scores[metric]))
     S_test[:] = S_test_tmp.mean(axis=0)
     return S_train.reshape(-1, 1), S_test.reshape(-1, 1)
 

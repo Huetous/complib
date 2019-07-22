@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from tqdm import tqdm
-
+from scipy import stats
 
 # ------------------------------------------------------------------------------------------------------
 def fillna_median(df, col):
@@ -94,8 +94,29 @@ def get_cols_with_null(df, threshold=0.99):
         print('There are none columns with', threshold, 'percent of null values.')
         return None
 
+def get_summary(df):
+    print(f"Dataset Shape: {df.shape}")
+    summary = pd.DataFrame(df.dtypes, columns=['dtypes'])
+    summary = summary.reset_index()
+    summary['Name'] = summary['index']
+    summary = summary[['Name', 'dtypes']]
+    summary['Missing'] = df.isnull().sum().values / df.isnull().count()
+    summary['Uniques'] = df.nunique().values
+    summary['First Value'] = df.loc[0].values
+    summary['Second Value'] = df.loc[1].values
+    summary['Third Value'] = df.loc[2].values
+
+    for name in summary['Name'].value_counts().index:
+        summary.loc[summary['Name'] == name, 'Entropy'] = round(
+            stats.entropy(df[name].value_counts(normalize=True), base=2), 2)
+    summary['Skew'] = stats.skew(df)
+
+    return summary
 
 # ------------------------------------------------------------------------------------------------------
+
+
+
 def show_cols_with_null(df):
     percents = (df.isnull().sum() / df.isnull().count()).sort_values(ascending=False)
     print('Missing data')
@@ -106,7 +127,7 @@ def show_cols_with_null(df):
 
 def show_skewed(df):
     sk_df = pd.DataFrame([{'column': col, 'uniq': df[col].nunique(),
-                           'skewness': df[col].value_counts(normalize=True).values[0] * 100} for col in df.columns])
+                           'skewness': stats.skew(df[col])} for col in df.columns])
     sk_df = sk_df.sort_values(['skewness'], ascending=False)
     print('Skewed features:')
     print(sk_df)
