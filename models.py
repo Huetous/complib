@@ -47,7 +47,6 @@ base_lgb_params = {
 # class HuetousLowLGB (train, Dataset, cv)
 # class HuetousLGB (fit, X,y)
 
-
 class HuetousLGB(BaseEstimator):
     def __init__(self, params, task='reg', eval_metric='mae', need_proba=False,
                  n_est=5000, early_stopping_rounds=200,
