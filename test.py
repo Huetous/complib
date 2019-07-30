@@ -10,23 +10,34 @@ from xgboost import XGBRegressor
 from ensemble.sklearnstack import StackingTransformer
 
 import warnings
+
 warnings.filterwarnings("ignore")
 
 boston = load_boston()
 X, y = boston.data, boston.target
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0)
-# X_tr, X_val, y_tr, y_val = train_test_split(X_train, y_train, test_size=0.2, random_state=0)
+X_tr, X_val, y_tr, y_val = train_test_split(X_train, y_train, test_size=0.2, random_state=0)
 from huelib.ensemble.lowramstack import stack
 
 from sklearn.ensemble import AdaBoostRegressor, ExtraTreesRegressor
 
-models = [
-    AdaBoostRegressor(),
-     ExtraTreesRegressor()
-]
 
-S_train, S_test = stack(models, X_train=X_train, y_train=y_train, X_test=X_test,
-                        mode='oof', metric=mean_absolute_error, verbose=2)
+
+# from huelib.models import HuetousCatBoost
+#
+# params = {
+#
+# }
+# cat = HuetousCatBoost(params=params, task='reg', iterations=1000, early_stopping_rounds=100)
+# cat.fit(X_train, y_train, X_test, y_test)
+
+# models = [
+#     AdaBoostRegressor(),
+#      ExtraTreesRegressor()
+# ]
+#
+# S_train, S_test = stack(models, X_train=X_train, y_train=y_train, X_test=X_test,
+#                         mode='oof', metric=mean_absolute_error, verbose=2)
 
 
 # from huelib.models import HuetousCatBoost, HuetousLGB, HuetousXGB

@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import KFold
+from sklearn.model_selection import KFold, StratifiedKFold
 
 
 class TargetSmoothedEncoder:
@@ -21,7 +21,7 @@ class TargetSmoothedEncoder:
 
         self.maps = dict()
         for col in self.cols:
-            global_mean = X[col].mean()
+            global_mean = y.mean()
             tmap = dict()
             uniques = X[col].unique()
             for unique in uniques:
@@ -46,14 +46,15 @@ class TargetSmoothedEncoder:
 
 
 class TargetEncoderCV:
-    def __init__(self, cols=None, n_splits=3, shuffle=True, seed=0):
+    def __init__(self, cols=None, n_splits=3, shuffle=True, seed=0, alpha=5):
         self.n_splits = n_splits
         self.shuffle = shuffle
         self.seed = seed
         self.cols = cols
+        self.alpha = alpha
 
     def fit(self, X, y):
-        self.target_encoder = TargetSmoothedEncoder(cols=self.cols).fit(X, y)
+        self.target_encoder = TargetSmoothedEncoder(cols=self.cols, alpha=self.alpha).fit(X, y)
         return self
 
     def transform(self, X, y=None):
@@ -70,3 +71,31 @@ class TargetEncoderCV:
 
     def fit_transform(self, X, y=None):
         return self.fit(X, y).transform(X, y)
+
+
+def mte_cv(X, target_col, X_test, cols, alpha=5, n_splits=5, cv_scheme='kf', shuffle=False):
+    encoded_cols = []
+    global_mean = X[target_col].mean()
+    for col in cols:
+        nrows = X.groupby(col)[target_col].count()
+        mean = X.groupby(col)[target_col].mean()
+        smothed_mean = (mean * nrows + global_mean * alpha) / (nrows + alpha)
+        encoded_cols_test = X_test[col].map(smothed_mean)
+        if cv_scheme is 'kf':
+            cv_split = KFold(n_splits=n_splits, random_state=42, shuffle=shuffle)
+        else:
+            cv_split = StratifiedKFold(n_splits=n_splits, random_state=42, shuffle=shuffle)
+
+        parts = []
+        for tr_idx, val_idx in cv_split.split(X[target_col]):
+            X_tr, X_val = X.iloc[tr_idx], X.iloc[val_idx]
+            nrows = X_tr.groupby(col)[target_col].count()
+            mean = X_tr.groupby(col)[target_col].mean()
+            smothed_mean = (mean * nrows + global_mean * alpha) / (nrows + alpha)
+            encoded_part = X_val[col].map(smothed_mean)
+            parts.append(encoded_part)
+
+        encoded_col = pd.concat(parts, axis=0)
+        encoded_col.fillna(global_mean, inplace=True)
+        encoded_cols.append(pd.DataFrame({'mean_' + target_col + '_' + col: encoded_col}))
+    return encoded_cols, encoded_cols_test

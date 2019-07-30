@@ -59,46 +59,35 @@ lgb_params = {'num_leaves': 256,
 
 class HuetousLGB(BaseEstimator):
     def __init__(self, params, task='reg', eval_metric='mae', need_proba=False,
-                 n_estimators=5000, early_stopping_rounds=200,
-                 verbose=500):
+                 n_estimators=1000, early_stopping_rounds=200,
+                 verbose=100):
         if task is 'reg':
-            self.model = lgb.LGBMRegressor(**params, n_estimators=n_estimators, n_jobs=-1)
+            self.estim = lgb.LGBMRegressor
             self.eval_metric = eval_metric
         elif task is 'clf':
-            self.model = lgb.LGBMClassifier(**params, n_estimators=n_estimators, n_jobs=-1)
+            self.estim = lgb.LGBMClassifier
             self.eval_metric = eval_auc
+        self.params = params
+        self.n_jobs = -1
+        self.n_estimators = n_estimators
         self.task = task
         self.verbose = verbose
         self.early_stopping_rounds = early_stopping_rounds
         self.need_proba = need_proba
 
     def fit(self, X_tr, y_tr, X_val, y_val):
-        self.columns = X_tr.columns
-        self.model.fit(X_tr, y_tr,
-                       eval_set=[(X_tr, y_tr), (X_val, y_val)],
-                       eval_metric=self.eval_metric,
-                       verbose=self.verbose,
-                       early_stopping_rounds=self.early_stopping_rounds)
+        self.estim = self.estim(**self.params, n_estimators=self.n_estimators, n_jobs=self.n_jobs)
+        self.estim.fit(X_tr, y_tr,
+                  eval_set=[(X_tr, y_tr), (X_val, y_val)],
+                  eval_metric=self.eval_metric,
+                  verbose=self.verbose,
+                  early_stopping_rounds=self.early_stopping_rounds)
 
     def predict(self, X):
-        if self.task is 'reg':
-            return self.model.predict(X, num_iteration=self.model.best_iteration_)
-        elif self.task is 'clf':
-            if self.need_proba is True:
-                return self.model.predict_proba(X, num_iteration=self.model.best_iteration_)[:, 1]
-            else:
-                return self.model.predict(X, num_iteration=self.model.best_iteration_)
-
-    def feature_importance(self):
-        feature_importance = pd.DataFrame()
-        feature_importance["feature"] = self.columns
-        feature_importance["importance"] = self.model.feature_importances_
-        cols = feature_importance[["feature", "importance"]].groupby("feature").mean().sort_values(
-            by="importance", ascending=False)[:50].index
-        best_features = feature_importance.loc[feature_importance.feature.isin(cols)]
-        sns.barplot(x="importance", y="feature", data=best_features.sort_values(by="importance", ascending=False))
-        plt.show()
-
+        if self.task is 'clf' and self.need_proba is True:
+            return self.estim.predict_proba(X=X, num_iteration=self.estim.best_iteration_)[:, 1]
+        else:
+            return self.estim.predict(X=X, num_iteration=self.estim.best_iteration_)
 
 
 class HuetousXGB(BaseEstimator):
@@ -159,8 +148,9 @@ class HuetousCatBoost(BaseEstimator):
                                                 eval_metric=eval_metric,
                                                 # loss_function=eval_metric,
                                                 verbose=verbose)
-        self.verbose =verbose
-    def fit(self, X_tr, y_tr, X_val, y_val):
+        self.verbose = verbose
+
+    def fit(self, X_tr=None, y_tr=None, X_val=None, y_val=None):
         self.model.fit(X_tr, y_tr,
                        eval_set=(X_val, y_val),
                        cat_features=[],

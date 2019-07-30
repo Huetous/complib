@@ -11,12 +11,14 @@ import plotly.plotly as py
 import plotly
 import plotly.graph_objs as go
 import matplotlib.pyplot as plt
+from sklearn.feature_selection import SelectFromModel
+import lightgbm as lgb
 
 plotly.tools.set_credentials_file(username='daddudota3', api_key='PjqulG0oXHlrVgWexu2q')
 
 
 # --------------------------------------------------------------------------------------------
-def do_feat_rfe(model, X_train, y_train, cv_split=None):
+def do_rfe(model, X_train, y_train, cv_split=None):
     if cv_split is None:
         cv_split = model_selection.ShuffleSplit(n_splits=10, test_size=.3, train_size=.6, random_state=0)
 
@@ -27,7 +29,7 @@ def do_feat_rfe(model, X_train, y_train, cv_split=None):
 
 
 # --------------------------------------------------------------------------------------------
-def do_feat_boruta(model, X_tr, y_tr):
+def do_boruta(model, X_tr, y_tr):
     selector = BorutaPy(model, n_estimators='auto', verbose=0,
                         random_state=1, max_iter=500)
     selector.fit(X_tr.values, y_tr.values)
@@ -37,7 +39,7 @@ def do_feat_boruta(model, X_tr, y_tr):
 
 
 # --------------------------------------------------------------------------------------------
-def do_feat_pca(df, threshold):
+def do_pca(df, threshold):
     print('PCA requires feature values to be standardised. Are they?))))')
     pca = PCA().fit_transform(df)
     explained_variance = 0.0
@@ -53,7 +55,7 @@ def do_feat_pca(df, threshold):
 
 
 # --------------------------------------------------------------------------------------------
-def do_feat_tsne(df, target):
+def do_tsne(df, target):
     tsne_model = TSNE(n_components=2, verbose=1, random_state=42, n_iter=500)
     tsne_results = tsne_model.fit_transform(df)
 
@@ -93,7 +95,7 @@ def do_feat_tsne(df, target):
 
 
 # -------------------------------------------------------------------------------------------
-def do_feat_kmeans(df, n_clusters):
+def do_kmeans(df, n_clusters):
     kmeans = KMeans(n_clusters=n_clusters)
     X_clustered = kmeans.fit_predict(df)
     trace_Kmeans = go.Scatter(x=df[:, 0], y=df[:, 1],
@@ -134,3 +136,19 @@ def do_feat_kmeans(df, n_clusters):
     return X_clustered
 
 
+# --------------------------------------------------------------------------------------------
+def do_sel_from_model(X, y, model=None, params=None, n_estimators=1000):
+    if params is None:
+        raise ValueError('Parameter <params> must be specified.')
+    if model is None:
+        model = lgb.LGBMClassifier(**params,
+                                   n_estimators=n_estimators,
+                                   n_jobs=-1)
+
+    selector = SelectFromModel(model, threshold='1.25*median')
+    selector.fit(X, y)
+    support = selector.get_support()
+    features = X.loc[:, support].columns.tolist()
+    print(str(len(features)), 'selected features')
+    print('do_feat_from_model: Done')
+    return features

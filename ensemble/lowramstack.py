@@ -6,12 +6,14 @@ from __future__ import division
 # ------------------------------------------------------------------------
 import os
 import sys
+import pandas as pd
 import warnings
 from datetime import datetime
 import numpy as np
 import scipy.stats as st
 from sklearn.model_selection import KFold
 from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import TimeSeriesSplit
 from sklearn.metrics import mean_absolute_error
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import log_loss, roc_auc_score
@@ -20,31 +22,30 @@ from sklearn.utils.validation import check_array
 from sklearn.base import clone
 
 
-# ------------------------------------------------------------------------
-# Am i really need this?
-def transformer(y, func=None):
-    if func is None:
-        return y
-    else:
-        return func(y)
+def aligned_text(str1, str2, MARGIN=20):
+    str = str1
+    str += ' ' * (MARGIN - len(str))
+    str += str2
+    return str
 
 
 # ------------------------------------------------------------------------
-def model_action(model, X_train, y_train, X_test,
-                 sample_weight=None, action=None, transform=None):
-    if action == 'fit':
-        if sample_weight is not None:
-            # if model.__class__.__name__ in ['HuetousLGB..]:
-            # fit(X_tr, y_tr, X_val, y_val)
-            return model.fit(X_train, transformer(y_train, func=transform), sample_weight=sample_weight)
+
+def model_action(model, X_train, y_train, X_test, X_valid=None, y_valid=None,
+                 sample_weight=None, action=None, is_custom=False):
+    if action is 'fit':
+        if is_custom:
+            if X_valid is None or y_valid is None:
+                raise ValueError('Parameters <X_valid> and <y_valid> must be specified for custom models.')
+            return model.fit(X_train, y_train, X_valid, y_valid)
         else:
-            return model.fit(X_train, transformer(y_train, func=transform))
-    elif action == 'predict':
-        return transformer(model.predict(X_test), func=transform)
-    elif action == 'predict_proba':
-        return transformer(model.predict_proba(X_test), func=transform)
+            return model.fit(X_train, y_train)
+    elif action is 'predict':
+        return model.predict(X_test)
+    elif action is 'predict_proba':
+        return model.predict_proba(X_test)
     else:
-        raise ValueError('Parameter action is not set or incorrect.')
+        raise ValueError('Parameter <action> is not set or incorrect.')
 
 
 # ------------------------------------------------------------------------
@@ -74,11 +75,10 @@ def model_params(model):
 
 # ------------------------------------------------------------------------
 def stack(models, X_train, y_train, X_test,
-          sample_weight=None, regression=True,
-          transform_target=None, transform_pred=None,
+          regression=True, metrics=None,
           mode='oof_pred_bag', needs_proba=False, save_dir=None,
-          metric=None, n_folds=4, stratified=False,
-          shuffle=False, random_state=0, verbose=0):
+          cv_schema='kf', n_folds=4, shuffle=False, random_state=0,
+          verbose=0):
     # -------------------------------------
     # Check parameters
     # -------------------------------------
@@ -92,6 +92,9 @@ def stack(models, X_train, y_train, X_test,
         save_dir = os.path.normpath(save_dir)
         if not os.path.isdir(save_dir):
             raise ValueError('Path does not exist or is nor a directory. Check <save_dir> parameter.')
+
+    if cv_schema not in ['kf', 'skf', 'ts']:
+        raise ValueError("Parameter <cv_schema> must be 'kf', 'skf' or 'ts' ")
 
     if not isinstance(n_folds, int):
         raise ValueError('Parameter <n_folds> must be integer.')
@@ -116,11 +119,7 @@ def stack(models, X_train, y_train, X_test,
                              allow_nd=True,
                              force_all_finite=False)
 
-    if sample_weight is not None:
-        sample_weight = np.array(sample_weight).ravel()
-
     regression = bool(regression)
-    stratified = bool(stratified)
     needs_proba = bool(needs_proba)
     shuffle = bool(shuffle)
 
@@ -128,57 +127,14 @@ def stack(models, X_train, y_train, X_test,
     # Check for inapplicable parameter combinations
     # -------------------------------------
 
-    if regression and (needs_proba or stratified):
-        warn_str = 'This is regression task hense classification-specific parameters set to <True> will be ignored:'
+    if regression and (needs_proba or cv_schema is 'skf'):
+        warn_str = 'This is regression task hense classification-specific parameters will be ignored:\n'
         if needs_proba:
             needs_proba = False
-            warn_str += '<needs_proba>'
-        if stratified:
-            stratified = False
-            warn_str += '<stratified>'
+            warn_str += '<needs_proba> changed to False\n'
+        if cv_schema is 'skf':
+            warn_str += "<cv_schema> changed to 'kf'\n"
         warnings.warn(warn_str, UserWarning)
-
-    # -------------------------------------
-    # Specify metric
-    # -------------------------------------
-    if metric is None and regression:
-        metric = mean_absolute_error
-    elif metric is None and not regression:
-        if needs_proba:
-            metric = log_loss
-        else:
-            metric = accuracy_score
-
-    # -------------------------------------
-    # Create report header
-    # -------------------------------------
-    if save_dir is not None or verbose > 0:
-        if regression:
-            task_str = 'task:           [regression]'
-        else:
-            task_str = 'task:           [classification]'
-            n_classes_str = 'n_classes:           [%d]' % len(np.unique(y_train))
-        metric_str = 'metric:         [%s]' % metric.__name__
-        mode_str = 'mode:           [%s]' % mode
-        n_models_str = 'n_models:       [%d]' % len(models)
-
-    if verbose > 0:
-        print(task_str)
-        if not regression:
-            print(n_classes_str)
-        print(metric_str)
-        print(mode_str)
-        print(n_models_str + '\n')
-
-    # -------------------------------------
-    # Specify split scheme
-    # -------------------------------------
-
-    # TimeSeriesSplit
-    if not regression and stratified:
-        kf = StratifiedKFold(n_splits=n_folds, shuffle=shuffle, random_state=random_state)
-    else:
-        kf = KFold(n_splits=n_folds, shuffle=shuffle, random_state=random_state)
 
     # -------------------------------------
     # Compute number of classes
@@ -189,6 +145,58 @@ def stack(models, X_train, y_train, X_test,
     else:
         n_classes = 1
         action = 'predict'
+
+    # -------------------------------------
+    # Specify metric
+    # -------------------------------------
+    if metrics is None:
+        metrics = []
+        if regression:
+            metrics.append(('mae', mean_absolute_error))
+        else:
+            if needs_proba:
+                metrics.append(('log_loss', log_loss))
+            else:
+                metrics.append(('roc_auc_score', roc_auc_score))
+
+    # -------------------------------------
+    # Specify split scheme
+    # -------------------------------------
+
+    if cv_schema is 'kf':
+        kf = KFold(n_splits=n_folds, shuffle=shuffle, random_state=random_state)
+    if not regression and cv_schema is 'skf':
+        kf = StratifiedKFold(n_splits=n_folds, shuffle=shuffle, random_state=random_state)
+    if cv_schema is 'ts':
+        kf = TimeSeriesSplit(n_splits=n_folds)
+
+    # -------------------------------------
+    # Create report header
+    # -------------------------------------
+    if save_dir is not None or verbose > 0:
+        if regression:
+            task_str = aligned_text('task:', '[regression]')
+        else:
+            task_str = aligned_text('task:', '[classification]')
+            action_str = aligned_text('action:', f'[{action}]')
+            n_classes_str = aligned_text('n_classes:', f'[{n_classes}]')
+        metrics_str = ''
+        for metric_name, metric in metrics:
+            metrics_str += f'[{metric_name}]'
+        metrics_str = aligned_text('metrics:', metrics_str)
+        mode_str = aligned_text('mode:', f'[{mode}]')
+        n_models_str = aligned_text('n_models:', f'[{len(models)}]')
+        cv_schema_str = aligned_text('cv_schema:', f'[{kf.__class__.__name__}]')
+
+    if verbose > 0:
+        print(task_str)
+        if not regression:
+            print(n_classes_str)
+            print(action_str)
+        print(metrics_str)
+        print(mode_str)
+        print(n_models_str)
+        print(cv_schema_str + '\n')
 
     # -------------------------------------
     # Create empty numpy arrays for OOF
@@ -211,9 +219,9 @@ def stack(models, X_train, y_train, X_test,
     # ------------------------------------------------
     # Loop across models
     # ------------------------------------------------
-    for model_counter, model in enumerate(models):
+    for model_counter, (model_name, model) in enumerate(models):
         if save_dir is not None or verbose > 0:
-            model_str = 'model%2d:        [%s]' % (model_counter, model.__class__.__name__)
+            model_str = aligned_text(f'model {model_counter}:', f'[{model_name}]')
         if save_dir is not None:
             models_folds_str += '-' * 40 + '\n'
             models_folds_str += model_str + '\n'
@@ -225,7 +233,16 @@ def stack(models, X_train, y_train, X_test,
         if mode in ['pred_bag', 'oof_pred_bag']:
             S_test_temp = np.zeros((X_test.shape[0], n_folds * n_classes))
 
-        scores = np.array([])
+        scores = pd.DataFrame()
+        for name, metric in metrics:
+            scores[name] = np.ndarray((n_folds,))
+        # -------------------------------------
+        # Custom models requires special treatment while training
+        # -------------------------------------
+        if model_name in ['HuetousLGB', 'HuetousXGB', 'HuetousCatBoost']:
+            is_custom = True
+        else:
+            is_custom = False
 
         # -------------------------------------
         # Loop across folds
@@ -235,45 +252,46 @@ def stack(models, X_train, y_train, X_test,
                 X_tr, X_val = X_train[tr_index], X_train[val_index]
                 y_tr, y_val = y_train[tr_index], y_train[val_index]
 
-                # Split sample weights accordingly
-                if sample_weight is not None:
-                    sample_weight_tr = sample_weight[tr_index]
-                else:
-                    sample_weight_tr = None
-
                 # Clone to avoid fitting model directly inside users list
                 model = clone(model, safe=False)
 
                 # Fit 1-st level model
                 if mode in ['pred_bag', 'oof', 'oof_pred', 'oof_pred_bag']:
-                    _ = model_action(model, X_tr, y_tr, None,
-                                     sample_weight=sample_weight_tr, action='fit',
-                                     transform=transform_target)
+                    _ = model_action(model=model,
+                                     X_train=X_tr, y_train=y_tr, X_valid=X_val, y_valid=y_val,
+                                     X_test=None,
+                                     action='fit', is_custom=is_custom)
 
                 # Predict ouf-of-fold part of train set
                 if mode in ['oof', 'oof_pred', 'oof_pred_bag']:
-                    if action == 'predict_proba':
+                    if action is 'predict_proba':
                         col_slice_model = slice(model_counter * n_classes, model_counter * n_classes + n_classes)
                     else:
                         col_slice_model = model_counter
-                    S_train[val_index, col_slice_model] = model_action(model,
-                                                                       None, None, X_val, action=action,
-                                                                       transform=transform_pred)
+                    S_train[val_index, col_slice_model] = model_action(model=model,
+                                                                       X_train=None, y_train=None,
+                                                                       X_test=X_val,
+                                                                       action=action, is_custom=is_custom)
                 # Predict full test set in each fold
                 if mode in ['pred_bag', 'oof_pred_bag']:
                     if action == 'predict_proba':
                         col_slice_fold = slice(fold_counter * n_classes, fold_counter * n_classes + n_classes)
                     else:
                         col_slice_fold = fold_counter
-                    S_test_temp[:, col_slice_fold] = model_action(model, None, None, X_test, action=action,
-                                                                  transform=transform_pred)
+                    S_test_temp[:, col_slice_fold] = model_action(model=model,
+                                                                  X_train=None, y_train=None,
+                                                                  X_test=X_test,
+                                                                  action=action, is_custom=is_custom)
 
                 # Compute scores
                 if mode in ['oof', 'oof_pred', 'oof_pred_bag']:
                     if save_dir is not None or verbose > 0:
-                        score = metric(y_val, S_train[val_index, col_slice_model])
-                        scores = np.append(scores, score)
-                        fold_str = '        fold %2d:   [%.8f]' % (fold_counter, score)
+                        fold_str = ''
+                        for metric_name, metric in metrics:
+                            score = metric(y_val, S_train[val_index, col_slice_model])
+                            scores.loc[fold_counter, metric_name] = score
+                            score_str = aligned_text(f'[{metric_name}]', '[{:.8f}]'.format(score), MARGIN=12)
+                            fold_str += '        fold {}:     {}\n'.format(fold_counter, score_str)
                     if save_dir is not None:
                         models_folds_str += fold_str + '\n'
                     if verbose > 1:
@@ -295,31 +313,35 @@ def stack(models, X_train, y_train, X_test,
         # Compute scores: mean + std and full
         if mode in ['oof', 'oof_pred', 'oof_pred_bag']:
             if save_dir is not None or verbose > 0:
-                sep_str = '        ----'
-                # MEAN AND FULL ARE SHOWN EQUAL
-                mean_str = '        MEAN:       [%.8f] +/- [%.8f]' % (np.mean(scores), np.std(scores))
-                full_str = '        FULL:       [%.8f]\n' % (metric(y_train, S_train[:, col_slice_model]))
+                sep_str = aligned_text('', '-' * 20, MARGIN=8)
+                mean_str = ''
+                for col in scores.columns:
+                    scores_str = aligned_text(f'[{col}]', '[{:.8f}]'.format(np.mean(scores[col])), MARGIN=12)
+                    scores_str += ' +/- [{:.8f}]\n'.format(np.std(scores[col]))
+                    mean_str += '        MEAN        {}'.format(scores_str)
             if save_dir is not None:
                 models_folds_str += sep_str + '\n'
                 models_folds_str += mean_str + '\n'
-                models_folds_str += full_str + '\n'
             if verbose > 0:
                 print(sep_str)
                 print(mean_str)
-                print(full_str)
 
         # Fit model on full train set and predict test set
         if mode in ['pred', 'oof_pred']:
             if verbose > 0:
                 print('     Fitting on full train set...\n')
-            _ = model_action(model, X_train, y_train, None, sample_weight=sample_weight,
-                             action='fit', transform=transform_target)
+            _ = model_action(model=model,
+                             X_train=X_train, y_train=y_train,
+                             X_test=None,
+                             action='fit', is_custom=is_custom)
             if action == 'predict_proba':
                 col_slice_model = slice(model_counter * n_classes, model_counter * n_classes + n_classes)
             else:
                 col_slice_model = model_counter
-            S_test[:, col_slice_model] = model_action(model, None, None, X_test, action=action
-                                                      , transform=transform_pred)
+            S_test[:, col_slice_model] = model_action(model=model,
+                                                      X_train=None, y_train=None,
+                                                      X_test=X_test,
+                                                      action=action, is_custom=is_custom)
     # -------------------------------------
     # Cast class labels to int
     # -------------------------------------
@@ -348,7 +370,7 @@ def stack(models, X_train, y_train, X_test,
             log_str += task_str + '\n'
             if not regression:
                 log_str += n_classes_str + '\n'
-            log_str += metric_str + '\n'
+            log_str += metrics_str + '\n'
             log_str += mode_str + '\n'
             log_str += n_models_str + '\n'
             log_str += models_folds_str + '\n'

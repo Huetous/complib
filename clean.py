@@ -5,6 +5,7 @@ import seaborn as sns
 from tqdm import tqdm
 from scipy import stats
 
+
 # ------------------------------------------------------------------------------------------------------
 def fillna_median(df, col):
     return df[col].fillna(df[col].median(), inplace=True)
@@ -94,6 +95,7 @@ def get_cols_with_null(df, threshold=0.99):
         print('There are none columns with', threshold, 'percent of null values.')
         return None
 
+
 def get_summary(df):
     print(f"Dataset Shape: {df.shape}")
     summary = pd.DataFrame(df.dtypes, columns=['dtypes'])
@@ -113,8 +115,8 @@ def get_summary(df):
 
     return summary
 
-# ------------------------------------------------------------------------------------------------------
 
+# ------------------------------------------------------------------------------------------------------
 
 
 def show_cols_with_null(df):

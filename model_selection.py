@@ -5,8 +5,10 @@ import pandas as pd
 import itertools
 import seaborn as sns
 from tqdm import tqdm
-import time
-from sklearn.metrics import mean_absolute_error
+from sklearn.base import clone
+from sklearn.metrics import f1_score, confusion_matrix
+import lightgbm as lgb
+from huelib.metrics import eval_auc
 
 
 # --------------------------------------------------------------------------------------------
@@ -71,38 +73,32 @@ def show_confusion_matrix(cm, classes, normalize=False, cmap=plt.get_cmap('RdBu'
 
 
 # --------------------------------------------------------------------------------------------
-def get_hue_oof(model, X, y, X_test,
-                cv_scheme='kf', n_splits=5, shuffle=False, seed=0,
-                metrics=[('mae', mean_absolute_error)]):
-    # -------------------------------------
-    # Specify CV scheme
-    # -------------------------------------
-    if cv_scheme not in ['kf', 'skf', 'ts']:
-        raise ValueError('Parameter <cv_scheme> incorrectly specified.')
+def get_hue_oof(params, X, y, X_test,
+                cv_scheme='kf', n_splits=5, shuffle=False, seed=42,
+                metrics=None, n_estimators=1000,
+                verbose=200, early_stopping_rounds=100,
+                conf_matrix=False, conf_matrix_norm=False):
+    if metrics is None:
+        metrics = [('f1', f1_score)]
+    if cv_scheme is 'kf':
+        cv_split = model_selection.KFold(n_splits=n_splits, shuffle=shuffle, random_state=seed)
+    elif cv_scheme is 'skf':
+        cv_split = model_selection.StratifiedKFold(n_splits=n_splits, shuffle=shuffle, random_state=seed)
     else:
-        if cv_scheme is 'kf':
-            cv_split = model_selection.KFold(n_splits=n_splits, shuffle=shuffle, random_state=seed)
-        elif cv_scheme is 'skf':
-            cv_split = model_selection.StratifiedKFold(n_splits=n_splits, shuffle=shuffle, random_state=seed)
-        else:
-            cv_split = model_selection.TimeSeriesSplit(n_splits=n_splits)
+        cv_split = model_selection.TimeSeriesSplit(n_splits=n_splits)
 
-    # -------------------------------------
-    # S_train - oof, S_test - pred
-    # -------------------------------------
     S_train = np.zeros((X.shape[0],))
     S_test = np.zeros((X_test.shape[0],))
-    S_test_tmp = np.empty((n_splits, X_test.shape[0]))
 
-    # -------------------------------------
-    # Scores for each fold
-    # -------------------------------------
-    scores = dict()
+    if conf_matrix:
+        cms = []
+    scores = pd.DataFrame()
+    feature_importance = pd.DataFrame()
+    for metric_name, metric in metrics:
+        scores[metric_name] = np.ndarray((n_splits,))
     columns = X.columns
-    # -------------------------------------
-    # Loop for fold
-    # -------------------------------------
-    for fold_n, (tr_idx, val_idx) in enumerate(cv_split.split(X)):
+
+    for fold_n, (tr_idx, val_idx) in enumerate(cv_split.split(X, y)):
         if type(X) is np.ndarray:
             X_tr, X_val = X[columns][tr_idx], X[columns][val_idx]
             y_tr, y_val = y[tr_idx], y[val_idx]
@@ -110,19 +106,54 @@ def get_hue_oof(model, X, y, X_test,
             X_tr, X_val = X[columns].iloc[tr_idx], X[columns].iloc[val_idx]
             y_tr, y_val = y[tr_idx], y[val_idx]
 
-        model.fit(X_tr, y_tr, X_val, y_val)
-        y_pred = model.predict(X_val)
+        model = lgb.LGBMClassifier(**params,
+                                   n_estimators=n_estimators,
+                                   n_jobs=-1)
+        model.fit(X_tr, y_tr,
+                  eval_set=[(X_tr, y_tr), (X_val, y_val)],
+                  eval_metric=eval_auc,
+                  verbose=verbose,
+                  early_stopping_rounds=early_stopping_rounds)
 
+        oof_pred = model.predict_proba(X_val)[:, 1]
+        test_pred = model.predict_proba(X_test,
+                                        num_iteration=model.best_iteration_)[:, 1]
+
+        for_metrics = model.predict(X_val)
         for (metric_name, metric) in metrics:
-            scores[metric_name] = metric(y_val, y_pred)
+            scores.loc[fold_n, metric_name] = metric(y_val, for_metrics)
 
-        S_train[val_idx] = y_pred.ravel()
-        S_test_tmp[fold_n, :] = model.predict(X_test)
+        S_train[val_idx] = oof_pred.ravel()
+        S_test += test_pred
+
+        if conf_matrix:
+            cms.append(confusion_matrix(y_val, for_metrics))
+
+        fold_importance = pd.DataFrame()
+        fold_importance["feature"] = columns
+        fold_importance["importance"] = model.feature_importances_
+        fold_importance["fold"] = fold_n + 1
+        feature_importance = pd.concat([feature_importance, fold_importance], axis=0)
+
+    S_test /= n_splits
+
+    feature_importance["importance"] /= n_splits
+    cols = feature_importance[["feature", "importance"]].groupby("feature").mean().sort_values(
+        by="importance", ascending=False)[:50].index
+    best_features = feature_importance.loc[feature_importance.feature.isin(cols)]
+    plt.figure(figsize=(16, 12))
+    sns.barplot(x="importance",
+                y="feature",
+                data=best_features.sort_values(by="importance", ascending=False))
+    plt.title('LGB Features (avg over folds)')
+
+    if conf_matrix:
+        cm = np.average(cms, axis=0)
+        plt.figure()
+        show_confusion_matrix(cm=cm, classes=[0, 1], normalize=conf_matrix_norm)
 
     print('=' * 60)
-    for metric in scores.keys():
-        print(f'[{metric}]\t','CV mean:', np.mean(scores[metric]), ', std:', np.std(scores[metric]))
-    S_test[:] = S_test_tmp.mean(axis=0)
+    for metric in scores.columns:
+        print(f'[{metric}]\t', 'CV mean:', np.mean(scores[metric]), ', std:', np.std(scores[metric]))
     return S_train.reshape(-1, 1), S_test.reshape(-1, 1)
-
 # --------------------------------------------------------------------------------------------

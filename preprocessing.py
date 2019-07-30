@@ -67,11 +67,11 @@ def do_was_missing_cols(df, preffix='was_missing_'):
 # --------------------------------------------------------------------------------------------
 # Categories
 # --------------------------------------------------------------------------------------------
-def do_cat_le(df, cols, preffix='le_'):
-    return do_cycle(df, cols, preffix, LabelEncoder().fit_transform, 'do_cat_le')
+# def do_cat_le(df, cols, preffix='le_'):
+#     return do_cycle(df, cols, preffix, LabelEncoder().fit_transform, 'do_cat_le')
 
 
-def do_cat_le_tr_te(train, test, cols, preffix='tr_te_le_'):
+def do_cat_le(train, test, cols, preffix='tr_te_le_'):
     le = LabelEncoder()
     new_cols = []
     for col in cols:
@@ -84,31 +84,27 @@ def do_cat_le_tr_te(train, test, cols, preffix='tr_te_le_'):
     return [train[new_cols], test[new_cols], new_cols]
 
 
-def do_cat_mte(df, cols=None, target_col=None, n_splits=3, preffix='mte_'):
+def do_cat_mte(train, test=None, cols=None, target_col=None,
+               n_splits=3, shuffle=False, seed=0, alpha=5,
+               preffix='mte_'):
     if cols is None:
         raise ValueError('Columns for encoding should be specified.')
     if target_col is None:
         raise ValueError('Target columns should be specified.')
 
-    mte = mean_target_encoder.TargetEncoderCV(cols=cols, n_splits=n_splits)
-    new_df = mte.fit_transform(df, df[target_col])
-    for col in cols:
-        new_df = new_df.rename(columns={str(col): str(preffix + col)})
-    return [new_df, list(new_df.columns.values)]
-
-
-def do_cat_mte_tr_te(train, test, cols=None, target_col=None, n_splits=3, preffix='mte_tr_te_'):
-    if cols is None:
-        raise ValueError('Columns for encoding should be specified.')
-    if target_col is None:
-        raise ValueError('Target columns should be specified.')
-
-    mte = mean_target_encoder.TargetEncoderCV(cols=cols, n_splits=n_splits)
+    mte = mean_target_encoder.TargetEncoderCV(cols=cols, n_splits=n_splits,
+                                              shuffle=shuffle, seed=seed, alpha=alpha)
     new_train = mte.fit_transform(train, train[target_col])
-    new_test = mte.transform(test)
+
+    if test is not None:
+        new_test = mte.transform(test)
+    else:
+        new_test = None
+
     for col in cols:
         new_train = new_train.rename(columns={str(col): str(preffix + col)})
-        new_test = new_test.rename(columns={str(col): str(preffix + col)})
+        if test is not None:
+            new_test = new_test.rename(columns={str(col): str(preffix + col)})
     return [new_train, new_test, list(new_train.columns.values)]
 
 
@@ -142,7 +138,7 @@ def do_num_z_scale(df, cols, preffix='z_scale_'):
 
 
 def do_num_minmax_scale(df, cols, preffix='minmax_scale_'):
-    return do_cycle(df, cols, preffix,  MinMaxScaler().fit_transform, 'do_num_minmax_scale')
+    return do_cycle(df, cols, preffix, MinMaxScaler().fit_transform, 'do_num_minmax_scale')
 
 
 def do_num_cut(df, cols, preffix='cut_', params=None):
