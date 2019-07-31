@@ -1,210 +1,64 @@
-# --------------------------------------------
-# HYPER PARAMETERS SEARCH
-# --------------------------------------------
-from sklearn import model_selection
-import time
-from hyperopt import hp, fmin, tpe, STATUS_OK, Trials
-
-
-# Bayesian optimization
-# Grid Search
-# Random Search
-# --------------------------------------------------------------------------------------------
-def get_param_grid(models_names, regression=True):
-    grid_n_estimator = [10, 50, 100, 300]
-    grid_ratio = [.1, .25, .5, .75, 1.0]
-    grid_learn = [.01, .03, .05, .1, .25]
-    grid_max_depth = [2, 4, 6, 8, 10, None]
-    grid_min_samples = [5, 10, .03, .05, .10]
-    grid_criterion = ['gini', 'entropy']
-    grid_bool = [True, False]
-    grid_seed = [0]
-    print('Запрос сетки параметров...')
-
-    param_grid = []
-    if regression:
-        params = {
-            'AdaBoostRegressor': [{'n_estimators': grid_n_estimator,
-                                   'learning_rate': grid_learn,
-                                   'random_state': grid_seed}],
-            # Extra Trees
-            'ExtraTreesRegressor': [{'n_estimators': grid_n_estimator,
-                                     'criterion': grid_criterion,
-                                     'max_depth': grid_max_depth,
-                                     'random_state': grid_seed
-                                     }],
-            # Gradient Boosting
-            'GradientBoostingRegressor': [{'learning_rate': grid_learn,
-                                           'n_estimators': grid_n_estimator,
-                                           'max_depth': grid_max_depth,
-                                           'random_state': grid_seed}],
-            # Random Forest
-            'RandomForestRegressor': [{'n_estimators': grid_n_estimator,
-                                       'max_depth': grid_max_depth,
-                                       'oob_score': [True],
-                                       'random_state': grid_seed}],
-            # Gaussian Process
-            'GaussianProcessRegressor': [{'random_state': grid_seed}],
-
-            # Passive Aggressive
-            'PassiveAggressiveRegressor': [{}],
-
-            # SGDRegressor
-            'SGDRegressor': [{'C': [1, 2, 3, 4, 5]}],
-
-            # KNN
-            'KNeighborsRegressor': [{'n_neighbors': [1, 2, 3, 4, 5, 6, 7],
-                                     'weights': ['uniform', 'distance'],
-                                     'algorithm': ['auto', 'ball_tree', 'kd_tree', 'brute']}],
-            # SVR
-            'SVR': [{'C': [1, 2, 3, 4, 5],
-                     'gamma': grid_ratio,
-                     'decision_function_shape': ['ovo', 'ovr'],
-                     'probability': [False],
-                     'random_state': grid_seed}],
-
-            # NuSVR
-            'NuSVR': [{'C': [1, 2, 3, 4, 5]}],
-
-            # Linear SVR
-            'LinearSVR': [{'C': [1, 2, 3, 4, 5]}],
-
-            # Decision Tree
-            'DecisionTreeRegressor': [{'max_depth': grid_max_depth,
-                                       'splitter': ['best', 'random']}],
-
-            # Extra Tree
-            'ExtraTreeRegressor': [{'max_depth': grid_max_depth,
-                                    'splitter': ['best', 'random']}],
-
-            # XGB
-            'XGBRegressor': [{'learning_rate': grid_learn,
-                              'max_depth': [1, 2, 4, 6, 8, 10],
-                              'n_estimators': grid_n_estimator,
-                              'seed': grid_seed}]}
-    else:
-        params = {
-            # AdaBoost
-            'AdaBoostClassifier': [{'n_estimators': grid_n_estimator,
-                                    'learning_rate': grid_learn,
-                                    'random_state': grid_seed}],
-
-            # Bagging
-            'BaggingClassifier': [{'n_estimators': grid_n_estimator,
-                                   'max_samples': grid_ratio,
-                                   'random_state': grid_seed}],
-
-            # Extra Trees
-            'ExtraTreesClassifier': [{'n_estimators': grid_n_estimator,
-                                      'criterion': grid_criterion,
-                                      'max_depth': grid_max_depth,
-                                      'random_state': grid_seed
-                                      }],
-
-            # Gradient Boosting
-            'GradientBoostingClassifier': [{'learning_rate': grid_learn,
-                                            'n_estimators': grid_n_estimator,
-                                            'max_depth': grid_max_depth,
-                                            'random_state': grid_seed}],
-
-            # Random Forest
-            'RandomForestClassifier': [{'n_estimators': grid_n_estimator,
-                                        'criterion': grid_criterion,
-                                        'max_depth': grid_max_depth,
-                                        'oob_score': grid_bool,
-                                        'random_state': grid_seed}],
-
-            # Gaussian Process
-            'GaussianProcessClassifier': [{'max_iter_predict': grid_n_estimator,
-                                           'random_state': grid_seed}],
-
-            # Logistic
-            'LogisticRegressionCV': [{'fit_intercept': grid_bool,
-                                      'solver': ['newton-cg', 'lbfgs', 'liblinear', 'sag', 'saga', ],
-                                      'random_state': grid_seed}],
-
-            # Passive Aggressive
-            'PassiveAggressiveClassifier': [{'C': [1, 2, 3, 4, 5],
-                                             'random_state': grid_seed,
-                                             'early_stopping': grid_bool}],
-
-            # Ridge
-            'RidgeClassifierCV': [{}],
-
-            # SGD
-            'SGDClassifier': [{}],
-
-            # Perceptron
-            'Perceptron': [{}],
-
-            # Bernoulli
-            'BernoulliNB': [{'alpha': grid_ratio}],
-
-            # Gaussian
-            'GaussianNB': [{}],
-
-            # KNN
-            'KNeighborsClassifier': [{'n_neighbors': [1, 2, 3, 4, 5, 6, 7],
-                                      'weights': ['uniform', 'distance'],
-                                      'algorithm': ['auto', 'ball_tree', 'kd_tree', 'brute']}],
-
-            # SVC
-            'SVC': [{'C': [1, 2, 3, 4, 5],
-                     'gamma': grid_ratio,
-                     'decision_function_shape': ['ovo', 'ovr'],
-                     'probability': [True],
-                     'random_state': grid_seed}],
-
-            # NuSVC
-            'NuSVC': [{}],
-
-            # Linear SVC
-            'LinearSVC': [{}],
-
-            # Decision Tree
-            'DecisionTreeClassifier': [{'max_depth': grid_max_depth,
-                                        'splitter': ['best', 'random']}],
-
-            # Extra Tee
-            'ExtraTreeClassifier': [{'max_depth': grid_max_depth,
-                                     'splitter': ['best', 'random']}],
-
-            # Linear Discriminant
-            'LinearDiscriminantAnalysis': [{}],
-
-            # Quadratic Discriminant
-            'QuadraticDiscriminantAnalysis': [{}],
-
-            # XGB
-            'XGBClassifier': [{'learning_rate': grid_learn,
-                               'max_depth': [1, 2, 4, 6, 8, 10],
-                               'n_estimators': grid_n_estimator,
-                               'seed': grid_seed}]}
-
-        for name in models_names:
-            param_grid.append(params[name])
-        print('Объем возвращаемой сетки параметров:', len(param_grid))
-
-    return param_grid
+from bayes_opt import BayesianOptimization
+import lightgbm as lgb
 
 
 # --------------------------------------------------------------------------------------------
-def do_param_grid_search(models, grid_param, X, y, cv_split=None):
-    if cv_split is None:
-        cv_split = model_selection.ShuffleSplit(n_splits=10, test_size=.3, train_size=.6, random_state=0)
-    start_total = time.perf_counter()
-    for clf, param in zip(models, grid_param):
-        start = time.perf_counter()
-        best_search = model_selection.GridSearchCV(estimator=clf[1], param_grid=param, cv=cv_split, scoring='roc_auc')
-        best_search.fit(X, y)
-        run = time.perf_counter() - start
-        best_param = best_search.best_params_
-        print('Best params for {} is {}, runtime: {:.2f} seconds.'.format(clf[1].__class__.__name__, best_param, run))
-        clf[1].set_params(**best_param)
+def do_bayes(X, y, init_round=15, opt_round=25,
+             n_folds=5, random_seed=42, n_estimators=1000,
+             learning_rate=0.05):
+    dtrain = lgb.Dataset(data=X, label=y,
+                         #categorical_feature = categorical_feats,
+                         free_raw_data=False)
 
-    run_total = time.perf_counter() - start_total
-    print('Total optimization time: {:.2f} minutes.'.format(run_total / 60))
-    print('-' * 15)
+    def lgb_eval(num_leaves, feature_fraction, bagging_fraction, max_depth, lambda_l1, lambda_l2, min_split_gain,
+                 min_child_samples, min_child_weight, subsample, subsample_freq, colsample_bytree):
+        params = {'objective': 'binary',
+                  'num_iterations': n_estimators,
+                  'learning_rate': learning_rate,
+                  'early_stopping_round': 100,
+                  'metric': 'auc',
+                  "num_leaves": int(round(num_leaves)),
+                  'feature_fraction': max(min(feature_fraction, 1), 0),
+                  'bagging_fraction': max(min(bagging_fraction, 1), 0),
+                  'max_depth': int(round(max_depth)),
+                  'lambda_l1': max(lambda_l1, 0),
+                  'lambda_l2': max(lambda_l2, 0),
+                  'min_split_gain': min_split_gain,
+                  'min_child_samples': int(min_child_samples),
+                  'min_child_weight': min_child_weight,
+                  'subsample': subsample,
+                  'subsample_freq': int(subsample_freq),
+                  'colsample_bytree': colsample_bytree}
 
+        cv_result = lgb.cv(params, dtrain,
+                           nfold=n_folds, seed=random_seed,
+                           stratified=True, verbose_eval=200,
+                           metrics=['auc'])
+        return max(cv_result['auc-mean'])
 
-# --------------------------------------------------------------------------------------------
+    lgbBO = BayesianOptimization(lgb_eval, {'num_leaves': (45, 55),
+                                            'feature_fraction': (0.1, 0.9),
+                                            'bagging_fraction': (0.8, 1),
+                                            'max_depth': (5, 9),
+                                            'lambda_l1': (0, 5),
+                                            'lambda_l2': (0, 3),
+                                            'min_split_gain': (0.001, 0.1),
+                                            'min_child_samples': (65, 75),
+                                            'min_child_weight': (5, 50),
+                                            'subsample': (0.7, 0.9),
+                                            'subsample_freq': (2, 4),
+                                            'colsample_bytree': (0.7, 0.9)
+                                            }, random_state=0)
+
+    lgbBO.maximize(init_points=init_round, n_iter=opt_round)
+
+    max_ = 0
+    for i in range(len(lgbBO.res)):
+        if lgbBO.res[i]['target'] > max_:
+            max_ = i
+
+    return lgbBO.res[max_]['params']
+
+# opt_params = do_bayes(X_ros, y_ros[0], init_round=1, opt_round=1,
+#                       n_folds=2, random_seed=42, n_estimators=50,
+#                       learning_rate=0.03)

@@ -239,7 +239,7 @@ def stack(models, X_train, y_train, X_test,
         # -------------------------------------
         # Custom models requires special treatment while training
         # -------------------------------------
-        if model_name in ['HuetousLGB', 'HuetousXGB', 'HuetousCatBoost']:
+        if model.__class__.__name__ in ['HuetousLGB', 'HuetousXGB', 'HuetousCatBoost']:
             is_custom = True
         else:
             is_custom = False
@@ -313,7 +313,7 @@ def stack(models, X_train, y_train, X_test,
         # Compute scores: mean + std and full
         if mode in ['oof', 'oof_pred', 'oof_pred_bag']:
             if save_dir is not None or verbose > 0:
-                sep_str = aligned_text('', '-' * 20, MARGIN=8)
+                sep_str = aligned_text('', '-' * 24, MARGIN=8)
                 mean_str = ''
                 for col in scores.columns:
                     scores_str = aligned_text(f'[{col}]', '[{:.8f}]'.format(np.mean(scores[col])), MARGIN=12)

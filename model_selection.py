@@ -9,38 +9,9 @@ from sklearn.base import clone
 from sklearn.metrics import f1_score, confusion_matrix
 import lightgbm as lgb
 from huelib.metrics import eval_auc
-
-
-# --------------------------------------------------------------------------------------------
-def get_best_models_by_corr(predictions, target_col='Target', threshhold=.70):
-    target = predictions[target_col]
-    data = predictions.drop([target_col], axis=1)
-
-    print('Поиск лучших моделей...')
-    corr_with_target = pd.DataFrame()
-    index = 0
-    corr_sum = 0
-    for col in data:
-        if np.abs(np.corrcoef(data[col], target)[0, 1]) > threshhold:
-            corr_with_target.loc[index, 'Model Name'] = col
-            corr_with_target.loc[index, 'Correlation with target'] = np.corrcoef(data[col], target)[0, 1]
-        index += 1
-
-    for model_name in corr_with_target['Model Name']:
-        for other_model_name in corr_with_target['Model Name']:
-            if model_name == other_model_name:
-                continue
-            else:
-                corr_sum += np.abs(np.corrcoef(data[model_name], data[other_model_name])[0, 1])
-        index = corr_with_target[corr_with_target['Model Name'] == model_name].index[0]
-        corr_with_target.loc[index, 'Corr. sum with other models'] = corr_sum
-        corr_sum = 0
-    corr_with_target.sort_values(['Correlation with target', 'Corr. sum with other models'],
-                                 ascending=[False, True], inplace=True)
-
-    print(corr_with_target)
-    print('Количество запрошенных моделей: ', corr_with_target.shape[0], '\n')
-    return corr_with_target['Model Name'].tolist()
+import gc
+from sklearn.preprocessing import LabelEncoder
+from sklearn.model_selection import KFold
 
 
 # --------------------------------------------------------------------------------------------
@@ -156,4 +127,65 @@ def get_hue_oof(params, X, y, X_test,
     for metric in scores.columns:
         print(f'[{metric}]\t', 'CV mean:', np.mean(scores[metric]), ', std:', np.std(scores[metric]))
     return S_train.reshape(-1, 1), S_test.reshape(-1, 1)
+
+
 # --------------------------------------------------------------------------------------------
+
+def adversarial_cv(train, test, cols_to_drop=None):
+    if cols_to_drop is not None:
+        test = test.drop(cols_to_drop, axis=1)
+    features = test.columns
+    train = train[features]
+
+    train['target'] = 0
+    test['target'] = 1
+
+    train_test = pd.concat([train, test], axis=0)
+    del train, test
+    gc.collect()
+
+    object_columns = list(train_test.select_dtypes('object').columns)
+
+    for f in object_columns:
+        lbl = LabelEncoder()
+        lbl.fit(list(train_test[f].values))
+        train_test[f] = lbl.transform(list(train_test[f].values))
+
+    train, test = model_selection.train_test_split(train_test, test_size=0.33,
+                                                   random_state=42, shuffle=True)
+    del train_test
+    gc.collect()
+
+    train_y = train['target'].values
+    test_y = test['target'].values
+    del train['target'], test['target']
+    gc.collect()
+
+    train = lgb.Dataset(train, label=train_y)
+    test = lgb.Dataset(test, label=test_y)
+
+    param = {'num_leaves': 50,
+             'min_data_in_leaf': 30,
+             'objective': 'binary',
+             'max_depth': 5,
+             'learning_rate': 0.2,
+             "min_child_samples": 20,
+             "boosting": "gbdt",
+             "feature_fraction": 0.9,
+             "bagging_freq": 1,
+             "bagging_fraction": 0.9,
+             "bagging_seed": 44,
+             "metric": 'auc',
+             "verbosity": -1}
+
+    clf = lgb.train(param, train, 200, valid_sets=[train, test],
+                    verbose_eval=50, early_stopping_rounds=50)
+
+    feature_imp = pd.DataFrame(sorted(zip(clf.feature_importance(), features)),
+                               columns=['Value', 'Feature'])
+
+    plt.figure(figsize=(20, 10))
+    sns.barplot(x="Value", y="Feature",
+                data=feature_imp.sort_values(by="Value", ascending=False).head(30))
+    plt.title('LightGBM Features')
+    plt.tight_layout()

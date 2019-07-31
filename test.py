@@ -30,7 +30,7 @@ from sklearn.ensemble import AdaBoostRegressor, ExtraTreesRegressor
 # }
 # cat = HuetousCatBoost(params=params, task='reg', iterations=1000, early_stopping_rounds=100)
 # cat.fit(X_train, y_train, X_test, y_test)
-
+#
 # models = [
 #     AdaBoostRegressor(),
 #      ExtraTreesRegressor()

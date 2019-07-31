@@ -67,6 +67,7 @@ class TargetEncoderCV:
         for tr_idx, val_idx in kf.split(X):
             te = TargetSmoothedEncoder(cols=self.cols).fit(X.iloc[tr_idx, :], y.iloc[tr_idx])
             res.iloc[val_idx, :] = te.transform(X.iloc[val_idx, :])
+        res.fillna(y.mean())
         return res
 
     def fit_transform(self, X, y=None):
