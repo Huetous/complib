@@ -30,7 +30,6 @@ def plot_oof_preds(target, preds, class_name):
 
 
 # --------------------------------------------------------------------------------------------
-# --------------------------------------------------------------------------------------------
 def show_corr_heatmap(df):
     _, ax = plt.subplots(figsize=(14, 12))
 
@@ -53,7 +52,67 @@ def show_corr_heatmap(df):
 
 # --------------------------------------------------------------------------------------------
 # --------------------------------------------------------------------------------------------
-def show_pairplot(df):
-    sns.pairplot(df)
+def show_():
+    tmp = pd.crosstab(train['ProductCD'], train['isFraud'], normalize='index') * 100
+    tmp = tmp.reset_index()
+    tmp.rename(columns={0: 'NoFraud', 1: 'Fraud'}, inplace=True)
+    total = len(train)
+    plt.figure(figsize=(14, 10))
+    plt.suptitle('ProductCD Distributions', fontsize=22)
+
+    plt.subplot(221)
+    g = sns.countplot(x='ProductCD', data=train)
+    g.set_title("ProductCD Distribution", fontsize=19)
+    g.set_xlabel("ProductCD Name", fontsize=17)
+    g.set_ylabel("Count", fontsize=17)
+    g.set_ylim(0, 500000)
+    for p in g.patches:
+        height = p.get_height()
+        g.text(p.get_x() + p.get_width() / 2.,
+               height + 3,
+               '{:1.2f}%'.format(height / total * 100),
+               ha="center", fontsize=14)
+
+    plt.subplot(222)
+    g1 = sns.countplot(x='ProductCD', hue='isFraud', data=train)
+    plt.legend(title='Fraud', loc='best', labels=['No', 'Yes'])
+    gt = g1.twinx()
+    gt = sns.pointplot(x='ProductCD', y='Fraud', data=tmp, color='black', order=['W', 'H', "C", "S", "R"], legend=False)
+    gt.set_ylabel("% of Fraud Transactions", fontsize=16)
+
+    g1.set_title("Product CD by Target(isFraud)", fontsize=19)
+    g1.set_xlabel("ProductCD Name", fontsize=17)
+    g1.set_ylabel("Count", fontsize=17)
+
+    plt.subplot(212)
+    g3 = sns.boxenplot(x='ProductCD', y='TransactionAmt', hue='isFraud',
+                       data=train[train['TransactionAmt'] <= 2000])
+    g3.set_title("Transaction Amount Distribuition by ProductCD and Target", fontsize=20)
+    g3.set_xlabel("ProductCD Name", fontsize=17)
+    g3.set_ylabel("Transaction Values", fontsize=17)
+
+    plt.subplots_adjust(hspace=0.6, top=0.85)
+
     plt.show()
 
+def show__():
+    plt.figure(figsize=(14, 10))
+
+    plt.subplot(221)
+    g2 = sns.boxplot(train.TransactionAmt)
+    g2.set_title('Box Plot of TRAIN Transaction Amount', fontsize=16)
+    g2.set_xlabel('Values of TRAIN Transaction Amount', fontsize=16)
+
+    plt.subplot(222)
+    g1 = sns.boxplot(test.TransactionAmt)
+    g1.set_title('Box Plot of TEST Transaction Amount', fontsize=20)
+    g1.set_xlabel('Values of TEST Transaction Amount', fontsize=16)
+
+    plt.subplot(212)
+    g3 = sns.distplot(test.TransactionAmt, label='TEST')
+    g3 = sns.distplot(train.TransactionAmt, label='TRAIN')
+    g3.legend()
+    g3.set_title('Distribution of Transaction Amount', fontsize=16)
+    g3.set_xlabel('Values of Transaction Amount', fontsize=16)
+
+    plt.subplots_adjust(hspace=0.9, top=0.8)
