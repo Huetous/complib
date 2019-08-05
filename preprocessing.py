@@ -70,6 +70,10 @@ def do_was_missing_cols(df, preffix='was_missing_'):
 # def do_cat_le(df, cols, preffix='le_'):
 #     return do_cycle(df, cols, preffix, LabelEncoder().fit_transform, 'do_cat_le')
 
+def do_cat_isnull(df, cols, preffix='is_null', delete_old=False):
+    ne = NullEncoder(cols=cols, preffix=preffix, delete_old=delete_old)
+    return ne.fit_transform(df)
+
 
 def do_cat_le(train, test, cols, preffix='tr_te_le_'):
     le = LabelEncoder()
@@ -281,6 +285,7 @@ def feat_ext(model, dir, datagen, sample_count, batch_size=20, target_size=(150,
             break
     return feats, labels
 
+
 # Feature extraction. conv_base not changes
 # model = models.Sequential()
 # model.add(conv_base)
@@ -289,3 +294,40 @@ def feat_ext(model, dir, datagen, sample_count, batch_size=20, target_size=(150,
 
 # Fine-tuning. conv_base top layers are unfreezed. They will retrained
 # for new task
+
+class NullEncoder:
+    def __init__(self, cols=None, preffix='_isnull', delete_old=False):
+        if not isinstance(cols, (list, str)):
+            raise TypeError('Parameter <cols> must be a list or a string')
+        if isinstance(cols, list):
+            if not all(isinstance(c, str) for c in cols):
+                raise TypeError('Each element of <cols> must be a string')
+        if not isinstance(delete_old, bool):
+            raise TypeError('Parameter <delete_old> must be True or False')
+
+        if isinstance(cols, str):
+            self.cols = [cols]
+        else:
+            self.cols = cols
+        self.preffix = preffix
+        self.delete_old = delete_old
+
+    def fit(self, X):
+        if self.cols is None:
+            self.cols = [c for c in X if X[c].isnull().sum() > 0]
+
+        for col in self.cols:
+            if col not in X:
+                raise ValueError(f'Column {col} not in X')
+
+        return self
+
+    def transform(self, X):
+        for col in self.cols:
+            X[self.preffix + col] = X[col].isnull()
+            if self.delete_old:
+                del X[col]
+        return X
+
+    def fit_transform(self, X):
+        return self.fit(X).transform(X)
