@@ -59,8 +59,7 @@ def permutation_importance(X, y, estimator, metric):
     return importances
 
 
-def permutation_importance_cv(X, y, estimator, metric,
-                              n_splits=3, shuffle=True, n_jobs=None):
+def permutation_importance_cv(X, y, estimator, metric, n_splits=3, shuffle=True,seed=0):
     if not isinstance(X, pd.DataFrame):
         raise TypeError('X must be a pandas DataFrame')
     if not isinstance(y, (pd.Series, np.ndarray)):
@@ -75,19 +74,15 @@ def permutation_importance_cv(X, y, estimator, metric,
         raise ValueError('Parameter<n_splits> must be 1 or greater')
     if not isinstance(shuffle, bool):
         raise TypeError('Parameter<shuffle> must be True or False')
-    if n_jobs is not None and not isinstance(n_jobs, int):
-        raise TypeError('Parameter<n_jobs> must be None or an int > 0')
-    if n_jobs is not None and n_jobs < 1:
-        raise ValueError('Parameter<n_jobs> must be > 0')
 
     importances = pd.DataFrame(np.zeros((n_splits, X.shape[1])), columns=X.columns)
-    kf = KFold(n_splits=n_splits, shuffle=shuffle)
+    kf = KFold(n_splits=n_splits, shuffle=shuffle,random_state=seed)
     iF = 0
     for train_ix, test_ix in kf.split(X):
         t_est = clone(estimator)
-        t_est.fit(X.iloc[train_ix, :], y.iloc[train_ix])
+        t_est.fit(X.iloc[train_ix, :], y[train_ix])
         t_imp = permutation_importance(X.iloc[test_ix, :].copy(),
-                                       y.iloc[test_ix].copy(),
+                                       y[test_ix].copy(),
                                        t_est, metric)
         importances.loc[iF, :] = t_imp.loc[0, :]
         iF += 1

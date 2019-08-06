@@ -116,3 +116,38 @@ def show__():
     g3.set_xlabel('Values of Transaction Amount', fontsize=16)
 
     plt.subplots_adjust(hspace=0.9, top=0.8)
+
+
+def plot_cat(dd, col):
+    mean_fraud = dd["isFraud"].mean()
+
+    plt.figure(figsize=(15, 10))
+
+    max_show_cats = 30
+    cnts = dd[col].value_counts(normalize=True, dropna=False)
+    plot_cnts = cnts.iloc[:max_show_cats]
+    plt.bar(range(len(plot_cnts)), plot_cnts, width=0.9, tick_label=plot_cnts.index)
+    plt.xticks(rotation=45, ha="right")
+    plt.ylabel("Category rate")
+    plt.grid(False)
+
+    test_cnts = test[col].value_counts(normalize=True)
+    plt.step(range(len(plot_cnts)), test_cnts.reindex(plot_cnts.index).fillna(0), c="b", where="mid", label="Test data")
+    plt.legend()
+
+    fraud_rate = dd.groupby(col)["isFraud"].mean()
+    if dd[col].isnull().any():
+        fraud_rate[np.nan] = dd.loc[dd[col].isnull(), "isFraud"].mean()
+
+    ax_fraud = plt.gca().twinx()
+    ax_fraud.stem(range(len(plot_cnts)), fraud_rate.reindex(plot_cnts.index), linefmt="k:", markerfmt="ko")
+    ax_fraud.set_ylabel("Fraud rate", color="k")
+    ax_fraud.grid(False)
+    ax_fraud.axhline(mean_fraud, ls="--", c="k")
+    ax_fraud.set_ylim(bottom=0)
+
+    title = [col]
+    if len(cnts) > len(plot_cnts):
+        title.append(f"({plot_cnts.sum():.0%} of data; {len(plot_cnts)}/{len(cnts)} cats)")
+    plt.title(" ".join(title))
+    plt.show()

@@ -13,6 +13,9 @@ import plotly.graph_objs as go
 import matplotlib.pyplot as plt
 from sklearn.feature_selection import SelectFromModel
 import lightgbm as lgb
+from scipy.stats import ks_2samp
+import statsmodels.api as sm
+from tqdm import tqdm
 
 plotly.tools.set_credentials_file(username='daddudota3', api_key='PjqulG0oXHlrVgWexu2q')
 
@@ -152,3 +155,65 @@ def do_sel_from_model(X, y, model=None, params=None, n_estimators=1000):
     print(str(len(features)), 'selected features')
     print('do_feat_from_model: Done')
     return features
+
+
+def do_ks_2samp(train, test):
+    rej = []
+    not_rej = []
+
+    for col in train.columns:
+        statistic, pvalue = ks_2samp(train[col], test[col])
+        if pvalue >= statistic:
+            not_rej.append(col)
+        if pvalue < statistic:
+            rej.append(col)
+
+        plt.figure(figsize=(8, 4))
+        plt.title("Kolmogorov-Smirnov test for train/test\n"
+                  "feature: {}, statistics: {:.5f}, pvalue: {:5f}".format(col, statistic, pvalue))
+        sns.kdeplot(train[col], color='blue', shade=True, label='Train')
+        sns.kdeplot(test[col], color='green', shade=True, label='Test')
+
+        plt.show()
+    return rej, not_rej
+
+
+def do_ols(train, target_col, fillna=True):
+    print('All category cols should be encoded.')
+    corr = train.corr()
+    columns = np.full((corr.shape[0],), True, dtype=bool)
+    for i in range(corr.shape[0]):
+        for j in range(i + 1, corr.shape[0]):
+            if corr.iloc[i, j] >= 0.9:
+                if columns[j]:
+                    columns[j] = False
+    selected_columns = train.columns[columns]
+    print(selected_columns.shape, ' selected by correlation')
+
+    train = train[selected_columns]
+    selected_columns = list(selected_columns)
+    selected_columns.remove(target_col)
+
+    if fillna:
+        train.fillna(-999, inplace=True)
+
+    def _backwardElimination(x, Y, sl, columns):
+        numVars = len(columns)
+        for i in tqdm(range(0, numVars)):
+            regressor_OLS = sm.OLS(Y, x).fit()
+            maxVar = max(regressor_OLS.pvalues).astype(float)
+            if maxVar > sl:
+                for j in range(0, numVars - i):
+                    if regressor_OLS.pvalues[j].astype(float) == maxVar:
+                        x = np.delete(x, j, 1)
+                        columns = np.delete(columns, j)
+
+        regressor_OLS.summary()
+        return x, columns
+
+    SL = 0.05
+    data_modeled, ols_selected_columns = _backwardElimination(train.drop([target_col], 1).values,
+                                                              train.target_col.values, SL, selected_columns)
+
+    print(len(ols_selected_columns), ' selected by ols')
+    return data_modeled, ols_selected_columns
