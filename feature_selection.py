@@ -13,7 +13,7 @@ import plotly.graph_objs as go
 import matplotlib.pyplot as plt
 from sklearn.feature_selection import SelectFromModel
 import lightgbm as lgb
-from scipy.stats import ks_2samp
+
 import statsmodels.api as sm
 from tqdm import tqdm
 
@@ -62,38 +62,13 @@ def do_tsne(df, target):
     tsne_model = TSNE(n_components=2, verbose=1, random_state=42, n_iter=500)
     tsne_results = tsne_model.fit_transform(df)
 
-    traceTSNE = go.Scatter(
-        x=tsne_results[:, 0],
-        y=tsne_results[:, 1],
-        name=target,
-        hoveron=target,
-        mode='markers',
-        text=target,
-        showlegend=True,
-        marker=dict(
-            size=8,
-            color='#c94ff2',
-            showscale=False,
-            line=dict(
-                width=2,
-                color='rgb(255, 255, 255)'
-            ),
-            opacity=0.8
-        )
-    )
-    data = [traceTSNE]
+    plt.figure(figsize=(15, 10))
+    plt.scatter(tsne_results[:, 0], tsne_results[:, 1], c=df[target],
+                cmap="coolwarm", edgecolor="None", alpha=0.35)
+    plt.colorbar()
+    plt.title('TSNE Scatter Plot')
+    plt.show()
 
-    layout = dict(title='TSNE (T-Distributed Stochastic Neighbour Embedding)',
-                  hovermode='closest',
-                  yaxis=dict(zeroline=False),
-                  xaxis=dict(zeroline=False),
-                  showlegend=False,
-
-                  )
-
-    fig = dict(data=data, layout=layout)
-    py.iplot(fig)
-    print('do_feat_tsne: Done')
     return tsne_results
 
 
@@ -139,6 +114,21 @@ def do_kmeans(df, n_clusters):
     return X_clustered
 
 
+def plot_kmean_inertia(df):
+    wcss = []
+    for i in range(1, 11):
+        kmeans = KMeans(n_clusters=i, init='k-means++', random_state=0)
+        kmeans.fit(df)
+        wcss.append(kmeans.inertia_)
+
+    plt.figure(figsize=(15, 10))
+    plt.plot(range(1, 11), wcss)
+    plt.title('The Elbow Method')
+    plt.xlabel('no of clusters')
+    plt.ylabel('wcss')
+    plt.show()
+
+
 # --------------------------------------------------------------------------------------------
 def do_sel_from_model(X, y, model=None, params=None, n_estimators=1000):
     if params is None:
@@ -157,25 +147,7 @@ def do_sel_from_model(X, y, model=None, params=None, n_estimators=1000):
     return features
 
 
-def do_ks_2samp(train, test):
-    rej = []
-    not_rej = []
 
-    for col in train.columns:
-        statistic, pvalue = ks_2samp(train[col], test[col])
-        if pvalue >= statistic:
-            not_rej.append(col)
-        if pvalue < statistic:
-            rej.append(col)
-
-        plt.figure(figsize=(8, 4))
-        plt.title("Kolmogorov-Smirnov test for train/test\n"
-                  "feature: {}, statistics: {:.5f}, pvalue: {:5f}".format(col, statistic, pvalue))
-        sns.kdeplot(train[col], color='blue', shade=True, label='Train')
-        sns.kdeplot(test[col], color='green', shade=True, label='Test')
-
-        plt.show()
-    return rej, not_rej
 
 
 def do_ols(train, target_col, fillna=True):
