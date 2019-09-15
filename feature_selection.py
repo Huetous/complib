@@ -43,8 +43,7 @@ def do_boruta(model, X_tr, y_tr):
 
 # --------------------------------------------------------------------------------------------
 def do_pca(df, threshold):
-    print('PCA requires feature values to be standardised. Are they?))))')
-    pca = PCA().fit_transform(df)
+    pca = PCA().fit(df)
     explained_variance = 0.0
     components = 0
 
@@ -53,6 +52,7 @@ def do_pca(df, threshold):
         components += 1
         if explained_variance >= threshold:
             break
+    print('Explained_variance: {},\n Components: {}'.format(explained_variance, components))
     print('do_feat_pca: Done')
     return PCA(n_components=components).fit_transform(df)
 

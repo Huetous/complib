@@ -2,6 +2,7 @@ from imblearn.over_sampling import SMOTE, RandomOverSampler
 from imblearn.under_sampling import RandomUnderSampler
 import pandas as pd
 import numpy as np
+import catboost
 
 
 def do_smote(X, y, seed=42, sampling_strategy=0.2):
@@ -53,3 +54,21 @@ def do_augment(x, y, t=2):
     x = np.vstack([x, xp, xn])
     y = np.concatenate([y, yp, yn])
     return x, y
+
+
+def get_pseudo(X_test, preds):
+    X_test['target'] = preds
+    data = X_test[(X_test['target'] <= 0.01) | (X_test['target'] >= 0.99)].copy()
+    X_test.drop('target', 1, inplace=True)
+    print('Added ', data.shape[0], 'new instances.')
+    data.loc[data['target'] >= 0.5, 'target'] = 1
+    data.loc[data['target'] < 0.5, 'target'] = 0
+    data.target = data.target.astype(int)
+    return data
+
+
+def get_weights(X, y, X_pseudo):
+    imps = catboost.CatBoostClassifier().get_object_importance(
+        catboost.Pool(data=X_pseudo.drop('target'), label=X_pseudo.target),
+        catboost.Pool(data=X, label=y))
+    return imps

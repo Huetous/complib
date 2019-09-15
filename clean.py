@@ -7,55 +7,57 @@ from scipy import stats
 
 
 # ------------------------------------------------------------------------------------------------------
-def fillna_median(df, col):
-    return df[col].fillna(df[col].median(), inplace=True)
+def fillna_median(df, c):
+    return df[c].fillna(df[c].median(), inplace=True)
 
 
-def fillna_mode(df, col):
-    return df[col].fillna(df[col].mode()[0], inplace=True)
+def fillna_mode(df, c):
+    return df[c].fillna(df[c].mode()[0], inplace=True)
 
 
-def fillna_norm(df, col):
-    c_avg = df[col].mean()
-    c_std = df[col].std()
-    c_null_count = df[col].isnull().sum()
+def fillna_norm(df, c):
+    c_avg = df[c].mean()
+    c_std = df[c].std()
+    cnt = df[c].isnull().sum()
 
-    c_null_random_list = np.random.randint(c_avg - c_std, c_avg + c_std, size=c_null_count)
-    df[col][np.isnan(df[col])] = c_null_random_list
-    return df[col]
+    rand_nums = np.random.randint(c_avg - c_std, c_avg + c_std, size=cnt)
+    df[c][np.isnan(df[c])] = rand_nums
+    return df[c]
 
 
-def clip_outliers(df, col):
-    q75, q25 = np.percentile(df[col], [75, 25])
-    upper_whisker = q75 + (q75 - q25) * 1.5
-    return df[col].clip(upper=upper_whisker)
+def clip_outliers(df, c, qs=None):
+    if qs is None:
+        qs = [1, 99]
+    q1, q2 = np.percentile(df[c], [qs[0], qs[1]])
+    upper_whisker = q1 + (q2 - q1) * 1.5
+    return df[c].clip(upper=upper_whisker)
 
 
 # ------------------------------------------------------------------------------------------------------
 def reduce_memory_usage(df):
-    numerics = ['int16', 'int32', 'int64', 'float16', 'float32', 'float64']
+    types = ['int16', 'int32', 'int64', 'float16', 'float32', 'float64']
     start_mem = df.memory_usage().sum() / 1024 ** 2
-    for col in tqdm(df.columns):
-        col_type = df[col].dtypes
-        if col_type in numerics:
-            c_min = df[col].min()
-            c_max = df[col].max()
-            if str(col_type)[:3] == 'int':
+    for c in tqdm(df.columns):
+        c_type = df[c].dtypes
+        if c_type in types:
+            c_min = df[c].min()
+            c_max = df[c].max()
+            if str(c_type)[:3] == 'int':
                 if c_min > np.iinfo(np.int8).min and c_max < np.iinfo(np.int8).max:
-                    df[col] = df[col].astype(np.int8)
+                    df[c] = df[c].astype(np.int8)
                 elif c_min > np.iinfo(np.int16).min and c_max < np.iinfo(np.int16).max:
-                    df[col] = df[col].astype(np.int16)
+                    df[c] = df[c].astype(np.int16)
                 elif c_min > np.iinfo(np.int32).min and c_max < np.iinfo(np.int32).max:
-                    df[col] = df[col].astype(np.int32)
+                    df[c] = df[c].astype(np.int32)
                 elif c_min > np.iinfo(np.int64).min and c_max < np.iinfo(np.int64).max:
-                    df[col] = df[col].astype(np.int64)
+                    df[c] = df[c].astype(np.int64)
             else:
                 if c_min > np.finfo(np.float16).min and c_max < np.finfo(np.float16).max:
-                    df[col] = df[col].astype(np.float16)
+                    df[c] = df[c].astype(np.float16)
                 elif c_min > np.finfo(np.float32).min and c_max < np.finfo(np.float32).max:
-                    df[col] = df[col].astype(np.float32)
+                    df[c] = df[c].astype(np.float32)
                 else:
-                    df[col] = df[col].astype(np.float64)
+                    df[c] = df[c].astype(np.float64)
     end_mem = df.memory_usage().sum() / 1024 ** 2
     print('Mem. usage decreased to {:5.2f} Mb ({:.1f}% reduction)'.format(end_mem, 100 * (
             start_mem - end_mem) / start_mem))

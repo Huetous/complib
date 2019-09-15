@@ -32,7 +32,7 @@ def do_cycle(df, cols, preffix, transform, func_name, params=None):
 
     print('Added', len(new_cols), 'new columns.')
     print(func_name + ': Done')
-    return [df[new_cols], new_cols]
+    return df[new_cols], new_cols
 
 
 # --------------------------------------------------------------------------------------------
@@ -40,52 +40,51 @@ def do_cycle(df, cols, preffix, transform, func_name, params=None):
 # --------------------------------------------------------------------------------------------
 def do_date_extract(df, col, preffix='date_'):
     new_cols = []
-    date_parts = ['year', 'weekday', 'month', 'weekofyear', 'day', 'quarter']
+    parts = ['year', 'weekday', 'month', 'weekofyear', 'day', 'quarter']
 
-    df[col] = pd.to_datetime(df[col])
-    for part in date_parts:
-        df[col + preffix + part] = getattr(df[col].dt, part).astype(int)
-        new_cols.append(col + preffix + part)
+    new_df = pd.DataFrame()
+    new_df[col] = pd.to_datetime(df[col])
+    for p in parts:
+        c_name = preffix + p
+        new_df[c_name] = getattr(df[col].dt, p).astype(int)
+        new_cols.append(c_name)
 
-    print('do_date_extract: Done')
-    print('Added', len(new_cols), 'new columns.')
-    return [df[new_cols], new_cols]
+    print(f'do_date_extract: Done. Added {len(new_cols)} new columns.')
+    return new_df, new_cols
 
 
-def do_was_missing_cols(df, preffix='was_missing_'):
-    cols_with_missing = [col for col in df.columns if df[col].isnull().any()]
+def do_isnull(df, preffix='isnull_'):
+    cols = [c for c in df.columns if df[c].isnull().sum() > 0]
     new_cols = []
-    for col in cols_with_missing:
-        df[preffix + col] = df[col].isnull()
-        new_cols.append(preffix + col)
+    new_df = pd.DataFrame()
+    for c in cols:
+        c_name = preffix + c
+        new_df[c_name] = df[c].isnull()
+        new_cols.append(c_name)
 
-    print('do_was_missing_cols: Done')
-    print('Added', len(new_cols), 'new columns.')
-    return [df[new_cols], new_cols]
+    print(f'do_isnull: Done. Added {len(new_cols)} new columns.')
+    return new_df, new_cols
 
 
 # --------------------------------------------------------------------------------------------
 # Categories
 # --------------------------------------------------------------------------------------------
-# def do_cat_le(df, cols, preffix='le_'):
-#     return do_cycle(df, cols, preffix, LabelEncoder().fit_transform, 'do_cat_le')
-
-def do_cat_isnull(df, cols, preffix='is_null', delete_old=False):
-    ne = NullEncoder(cols=cols, preffix=preffix, delete_old=delete_old)
-    return ne.fit_transform(df)
-
-
-def do_cat_le(train, test, cols, preffix='tr_te_le_'):
-    le = LabelEncoder()
+def do_cat_le_nan(train, test, cols, preffix='le_'):
     new_cols = []
-    for col in cols:
-        le.fit(train[col].append(test[col]))
-        train[preffix + col] = le.transform(train[col])
-        test[preffix + col] = le.transform(test[col])
+    new_train, new_test = pd.DataFrame(), pd.DataFrame()
+    for c in cols:
+        mask_tr = train[c].isnull()
+        mask_te = test[c].isnull()
+        c_name = preffix + c
 
-        new_cols.append(preffix + col)
+        le = LabelEncoder()
+        le.fit(list(train[c].astype(str).values) + list(test[c].astype(str).values))
 
-    return [train[new_cols], test[new_cols], new_cols]
+        new_train[c_name] = le.transform(list(train[c].astype(str).values)).where(~mask_tr)
+        new_test[c_name] = le.transform(list(test[c].astype(str).values)).where(~mask_te)
+        new_cols.append(c_name)
+    print(f'do_cat_le_nan: Done. Added {len(new_cols)} new columns.')
+    return new_train, new_test, new_cols
 
 
 def do_cat_mte(train, test=None, cols=None, target_col=None,
@@ -99,50 +98,66 @@ def do_cat_mte(train, test=None, cols=None, target_col=None,
     mte = mean_target_encoder.TargetEncoderCV(cols=cols, n_splits=n_splits,
                                               shuffle=shuffle, seed=seed, alpha=alpha)
     new_train = mte.fit_transform(train, train[target_col])
-
     if test is not None:
         new_test = mte.transform(test)
     else:
         new_test = None
 
-    for col in cols:
-        new_train = new_train.rename(columns={str(col): str(preffix + col)})
+    for c in cols:
+        new_train = new_train.rename(columns={str(c): str(preffix + c)})
         if test is not None:
-            new_test = new_test.rename(columns={str(col): str(preffix + col)})
-    return [new_train, new_test, list(new_train.columns.values)]
+            new_test = new_test.rename(columns={str(c): str(preffix + c)})
+    new_cols = list(new_train.columns)
+
+    print(f'do_cat_mte: Done. Added {len(new_cols)} new columns.')
+    return new_train, new_test,new_cols
 
 
 def do_cat_dummy(df, cols, preffix='dummy_'):
     new_cols = []
-    for col in cols:
-        df[preffix + col] = pd.get_dummies(df[col], drop_first=True)
-        new_cols.append(preffix + col)
+    new_df = pd.DataFrame()
+    for c in cols:
+        c_name = preffix + c
+        new_df[c_name] = pd.get_dummies(df[c], drop_first=True)
+        new_cols.append(c_name)
+    print(f'do_cat_dummy: Done. Added {len(new_cols)} new columns.')
+    return new_df, new_cols
 
-    print('do_cat_dummy: Done')
-    print('Added', len(new_cols), 'new columns.')
-    return [df[new_cols], new_cols]
 
+def do_cat_freq(train, test, cols, preffix='freq_'):
+    new_cols = []
+    new_train = pd.DataFrame()
+    new_test = pd.DataFrame()
+    for c in cols:
+        c_name = preffix + c
+        tmp = pd.concat([train[[c]], test[[c]]])
+        enc = tmp[c].value_counts().to_dict()
 
-def do_cat_freq(df, cols, preffix='freq_', params=None):
-    return 0
+        new_train[c_name] = train[c].map(enc)
+        new_test[c_name] = test[c].map(enc)
+        new_cols.append(c_name)
+    print(f'do_cat_freq: Done. Added {len(new_cols)} new columns.')
+    return new_train, new_test, new_cols
 
 
 # --------------------------------------------------------------------------------------------
 # Numerical
 # --------------------------------------------------------------------------------------------
-def do_num_z_scale(df, cols, preffix='z_scale_'):
-    st_scaler = StandardScaler()
+def do_num_standard(df, cols, preffix='z_scale_'):
+    scl = StandardScaler()
     new_cols = []
-    for col in cols:
-        df[preffix + col] = st_scaler.fit_transform(df[[col]])
-        new_cols.append(preffix + col)
-
-    clean.reduce_memory_usage(df[new_cols])
-    return [df[new_cols], new_cols]
+    new_df = pd.DataFrame()
+    for c in cols:
+        c_name = preffix + c
+        new_df[c_name] = scl.fit_transform(df[c])
+        new_cols.append(c_name)
+    clean.reduce_memory_usage(new_df)
+    print(f'do_num_standard: Done. Added {len(new_cols)} new columns.')
+    return new_df, new_cols
 
 
 def do_num_minmax_scale(df, cols, preffix='minmax_scale_'):
-    return do_cycle(df, cols, preffix, MinMaxScaler().fit_transform, 'do_num_minmax_scale')
+    return do_cycle(df, cols, preffix, MinMaxScaler().fit_transform, 'do_num_minmax')
 
 
 def do_num_cut(df, cols, preffix='cut_', params=None):
@@ -240,8 +255,6 @@ def get_feat_knn(df, cols, preffix='knn_'):
 # --------------------------------------------------------------------------------------------
 # Times-series and signal processing
 #
-def get_rolling_mean(df, cols, preffix='rolling_', parans=None):
-    return [0, 0]
 
 
 # //////////////////////////////////////
@@ -284,50 +297,3 @@ def feat_ext(model, dir, datagen, sample_count, batch_size=20, target_size=(150,
         if i * batch_size >= sample_count:
             break
     return feats, labels
-
-
-# Feature extraction. conv_base not changes
-# model = models.Sequential()
-# model.add(conv_base)
-# model.add(layers.Dense(256...))
-# conv_base.trainable = False
-
-# Fine-tuning. conv_base top layers are unfreezed. They will retrained
-# for new task
-
-class NullEncoder:
-    def __init__(self, cols=None, preffix='_isnull', delete_old=False):
-        if not isinstance(cols, (list, str)):
-            raise TypeError('Parameter <cols> must be a list or a string')
-        if isinstance(cols, list):
-            if not all(isinstance(c, str) for c in cols):
-                raise TypeError('Each element of <cols> must be a string')
-        if not isinstance(delete_old, bool):
-            raise TypeError('Parameter <delete_old> must be True or False')
-
-        if isinstance(cols, str):
-            self.cols = [cols]
-        else:
-            self.cols = cols
-        self.preffix = preffix
-        self.delete_old = delete_old
-
-    def fit(self, X):
-        if self.cols is None:
-            self.cols = [c for c in X if X[c].isnull().sum() > 0]
-
-        for col in self.cols:
-            if col not in X:
-                raise ValueError(f'Column {col} not in X')
-
-        return self
-
-    def transform(self, X):
-        for col in self.cols:
-            X[self.preffix + col] = X[col].isnull()
-            if self.delete_old:
-                del X[col]
-        return X
-
-    def fit_transform(self, X):
-        return self.fit(X).transform(X)
