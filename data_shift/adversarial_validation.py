@@ -9,13 +9,13 @@ from sklearn import model_selection
 import seaborn as sns
 
 
-def get_adv_val(X_train, X_test):
+def get_adv_val(X, X_test):
     X_test.drop(["target"], 1, inplace=True)
 
-    train, val = X_train[X_train.probas < 0.9], X_train[X_train.probas >= 0.9]
-    weights = X_train['probas']
+    train, val = X[X.probas < 0.9], X[X.probas >= 0.9]
+    weights = X['probas']
 
-    del X_train
+    del X
     gc.collect()
 
     train = train.drop(["probas"], 1)

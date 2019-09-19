@@ -147,9 +147,6 @@ def do_sel_from_model(X, y, model=None, params=None, n_estimators=1000):
     return features
 
 
-
-
-
 def do_ols(train, target_col, fillna=True):
     print('All category cols should be encoded.')
     corr = train.corr()

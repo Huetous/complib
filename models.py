@@ -17,8 +17,10 @@ from sklearn.base import BaseEstimator
 from huelib.metrics import eval_auc
 import gc
 import time
+from sklearn.linear_model import LogisticRegression
 
 plotly.tools.set_credentials_file(username='daddudota3', api_key='PjqulG0oXHlrVgWexu2q')
+from sklearn.metrics import roc_auc_score
 
 # class huetousLinear():
 
@@ -57,15 +59,39 @@ lgb_params = {'num_leaves': 256,
               }
 
 
+class HuetousLogReg(BaseEstimator):
+    def __init__(self, params, need_proba=False,
+                 max_iter=100, eval_metric=None):
+        if eval_metric is None:
+            raise ValueError('Parameter <eval_metric> must be specified.')
+        self.clf = LogisticRegression(**params, max_iter=max_iter)
+        self.eval_metric = eval_metric
+        self.need_proba = need_proba
+
+    def fit(self, X_tr, y_tr, X_val, y_val):
+        self.clf.fit(X_tr, y_tr)
+        if self.need_proba:
+            y_pred = self.clf.predict_proba(X_val)[:, 1]
+        else:
+            y_pred = self.clf.predict(X_val)
+        print(f'LogReg {self.eval_metric.__class__.__name__}: {self.eval_metric(y_val, y_pred)}')
+
+    def predict(self, X):
+        if self.need_proba:
+            return self.clf.predict_proba(X)[:, 1]
+        else:
+            return self.clf.predict(X)
+
+
 class HuetousLGB(BaseEstimator):
     def __init__(self, params, task='reg', eval_metric='mae', need_proba=False,
                  n_estimators=1000, early_stopping_rounds=200,
                  verbose=100):
         if task is 'reg':
-            self.estim = lgb.LGBMRegressor
+            self.clf = lgb.LGBMRegressor
             self.eval_metric = eval_metric
         elif task is 'clf':
-            self.estim = lgb.LGBMClassifier
+            self.clf = lgb.LGBMClassifier
             self.eval_metric = eval_auc
         self.params = params
         self.n_jobs = -1
@@ -76,18 +102,20 @@ class HuetousLGB(BaseEstimator):
         self.need_proba = need_proba
 
     def fit(self, X_tr, y_tr, X_val, y_val):
-        self.estim = self.estim(**self.params, n_estimators=self.n_estimators, n_jobs=self.n_jobs)
-        self.estim.fit(X_tr, y_tr,
-                  eval_set=[(X_tr, y_tr), (X_val, y_val)],
-                  eval_metric=self.eval_metric,
-                  verbose=self.verbose,
-                  early_stopping_rounds=self.early_stopping_rounds)
+        self.clf = self.clf(**self.params,
+                            n_estimators=self.n_estimators,
+                            n_jobs=self.n_jobs)
+        self.clf.fit(X_tr, y_tr,
+                     eval_set=[(X_tr, y_tr), (X_val, y_val)],
+                     eval_metric=self.eval_metric,
+                     verbose=self.verbose,
+                     early_stopping_rounds=self.early_stopping_rounds)
 
     def predict(self, X):
         if self.task is 'clf' and self.need_proba is True:
-            return self.estim.predict_proba(X=X, num_iteration=self.estim.best_iteration_)[:, 1]
+            return self.clf.predict_proba(X=X, num_iteration=self.clf.best_iteration_)[:, 1]
         else:
-            return self.estim.predict(X=X, num_iteration=self.estim.best_iteration_)
+            return self.clf.predict(X=X, num_iteration=self.clf.best_iteration_)
 
 
 class HuetousXGB(BaseEstimator):
