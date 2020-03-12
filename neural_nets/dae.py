@@ -1,10 +1,7 @@
 from tensorflow.python.keras.models import Model
 from tensorflow.python.keras.layers import Dense, Input, Dropout, BatchNormalization, Activation, Concatenate
-from tensorflow.python.keras.optimizers import Adam, Nadam
 from sklearn.metrics import roc_auc_score
-from sklearn.model_selection import StratifiedKFold
 from tensorflow.python.keras.callbacks import ModelCheckpoint, Callback, EarlyStopping, ReduceLROnPlateau
-from tensorflow.python.keras.regularizers import l2
 import numpy as np
 import tensorflow as tf
 
@@ -13,7 +10,7 @@ def auc(y_true, y_pred):
     def fallback_auc(y_true, y_pred):
         try:
             return roc_auc_score(y_true, y_pred)
-        except:
+        except ValueError:
             return 0.5
 
     return tf.py_func(fallback_auc, (y_true, y_pred), tf.double)

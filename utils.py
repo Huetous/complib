@@ -14,7 +14,7 @@ def load_pickle(filename):
         data = pickle.load(handle)
         return [data, list(data.columns.values)]
 
-
+# Assembles data from pickles in given list
 def assemble_data(pickle_list):
     assembled_data, assembled_cols = load_pickle(pickle_list[0])
     for filename in pickle_list:

@@ -1,34 +1,10 @@
-from sklearn.metrics import mean_absolute_error, mean_squared_error, accuracy_score
-from tensorflow.python.keras import models, layers
-import numpy as np
-import plotly.plotly as py
-import plotly
-import plotly.graph_objs as go
-from sklearn import svm, tree, linear_model, neighbors, naive_bayes, ensemble, discriminant_analysis, gaussian_process
-from sklearn import model_selection
-import seaborn as sns
-import matplotlib.pyplot as plt
 import pandas as pd
 import lightgbm as lgb
 import xgboost as xgb
 import catboost as cat
-from sklearn.base import clone
 from sklearn.base import BaseEstimator
-from huelib.metrics import eval_auc
-import gc
-import time
 from sklearn.linear_model import LogisticRegression
-
-plotly.tools.set_credentials_file(username='daddudota3', api_key='PjqulG0oXHlrVgWexu2q')
 from sklearn.metrics import roc_auc_score
-
-# class huetousLinear():
-
-# Linear
-# Trees
-# NN
-# Exotic (FM/FFM)
-
 # -------------------------------------------------------------------------------------
 base_lgb_params = {
     # regression, huber, binary, multiclass, xentropy
@@ -92,7 +68,7 @@ class HuetousLGB(BaseEstimator):
             self.eval_metric = eval_metric
         elif task is 'clf':
             self.clf = lgb.LGBMClassifier
-            self.eval_metric = eval_auc
+            self.eval_metric = roc_auc_score
         self.params = params
         self.n_jobs = -1
         self.n_estimators = n_estimators
@@ -142,24 +118,6 @@ class HuetousXGB(BaseEstimator):
         return self.model.predict(dtest, ntree_limit=self.model.best_ntree_limit)
 
 
-cat_params = {
-    # verbose: N - every N iters show log
-    # more iters (default=1000)
-    #
-    # cat_features_names = X.columns # here we specify names of categorical features
-    # cat_features = [X.columns.get_loc(col) for col in cat_features_names]
-    # cat(cat_features)
-    #
-    # 'early_stopping_rounds': 200, if metric doesn`t improve for N rounds than stop training
-    # we dont need to wait all 1000
-    #
-    # faster trainig
-    # 'task_type': 'GPU',
-    # 'border_count': 32,
-    # use_best_model=True
-}
-
-
 class HuetousCatBoost(BaseEstimator):
     def __init__(self, params, task='reg', eval_metric='MAE',
                  iterations=5000, early_stopping_rounds=200,
@@ -168,13 +126,11 @@ class HuetousCatBoost(BaseEstimator):
             self.model = cat.CatBoostRegressor(**params, iterations=iterations,
                                                early_stopping_rounds=early_stopping_rounds,
                                                eval_metric=eval_metric,
-                                               # loss_function=eval_metric,
                                                verbose=verbose)
         elif task is 'clf':
             self.model = cat.CatBoostClassifier(**params, iterations=iterations,
                                                 early_stopping_rounds=early_stopping_rounds,
                                                 eval_metric=eval_metric,
-                                                # loss_function=eval_metric,
                                                 verbose=verbose)
         self.verbose = verbose
 
@@ -190,25 +146,25 @@ class HuetousCatBoost(BaseEstimator):
 
 
 # -------------------------------------------------------------------------------------
-# Train separate models for each type
-def do_sep_models_train(model, params, X_tr, y_tr, X_te, target_name, type):
-    if not isinstance(type, str):
+# Train separate models for each categorical value in given column
+def do_sep_models_train(model, params, X_tr, y_tr, X_te, target_name, c):
+    if not isinstance(c, str):
         raise ValueError('Parameter <type> should be string.')
 
     S_train = pd.DataFrame({'index': list(X_tr.index),
-                            type: X_tr[type].values,
+                            c: X_tr[c].values,
                             'oof': [0] * len(X_tr),
                             'target': y_tr.values})
     S_test = pd.DataFrame(
         {'index': list(X_te.index),
-         type: X_te[type].values,
+         c: X_te[c].values,
          'preds': [0] * len(X_te)})
 
-    for t in X_tr[type].unique():
+    for t in X_tr[c].unique():
         print(f'Training of type {t}')
-        X_t = X_tr.loc[X_tr[type] == t]
-        X_test_t = X_te.loc[X_te[type] == t]
-        y_t = X_tr.loc[X_tr[type] == t, target_name]
+        X_t = X_tr.loc[X_tr[c] == t]
+        X_test_t = X_te.loc[X_te[c] == t]
+        y_t = X_tr.loc[X_tr[c] == t, target_name]
 
         model = model(**params).fit(X_t, y_t, X_test_t)
         preds = model.predict()

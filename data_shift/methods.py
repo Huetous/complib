@@ -3,7 +3,7 @@ from scipy.stats import ks_2samp
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-
+# Performs distribution smoothing - takes only those values in each column that appear at train and test often
 def distribution_smoothing(train, test, cols):
     for col in cols:
         print('before. nunique {} Train {}, Test {}'.format(col, train[col].nunique(), test[col].nunique()))
@@ -23,6 +23,7 @@ def distribution_smoothing(train, test, cols):
         print('-' * 20)
 
 
+# Performs Kolmogorov-Smitnov test on features distributions
 def do_ks_2samp(train, test):
     rej = []
     not_rej = []

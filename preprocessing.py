@@ -9,6 +9,8 @@ import gc
 # --------------------------------------------------------------------------------------------
 # Misc
 # --------------------------------------------------------------------------------------------
+
+# Adds to a dataset new columns which represents parts of datetime
 def do_date_extract(df, col):
     new_cols = []
     parts = ['year', 'weekday', 'month', 'weekofyear', 'day', 'quarter', 'dayofyear']
@@ -23,6 +25,7 @@ def do_date_extract(df, col):
     return new_df, new_cols
 
 
+# Adds to a dataset new column which notes 1 if column contains nan values
 def do_isnull(X, X_test, cols):
     X_tr = pd.DataFrame()
     X_te = pd.DataFrame()
@@ -37,8 +40,10 @@ def do_isnull(X, X_test, cols):
 
 
 # --------------------------------------------------------------------------------------------
-# Categories
+# Categorical
 # --------------------------------------------------------------------------------------------
+
+# Performs label encoding on given columns
 def do_cat_le(X, X_test, cols):
     new_cols = []
     X_tr, X_te = pd.DataFrame(), pd.DataFrame()
@@ -57,6 +62,7 @@ def do_cat_le(X, X_test, cols):
     return X_tr, X_te, new_cols
 
 
+# Performs one hot encoding on given columns
 def do_cat_ohe(X, X_test, cols):
     X_len = len(X)
     data = pd.concat([X, X_test])
@@ -68,6 +74,7 @@ def do_cat_ohe(X, X_test, cols):
     return X_tr, X_te, new_cols
 
 
+# Performs hash encoding on given columns
 def do_cat_hash(X, X_test, cols):
     X_tr = pd.DataFrame()
     X_te = pd.DataFrame()
@@ -82,6 +89,7 @@ def do_cat_hash(X, X_test, cols):
     return X_tr, X_te, new_cols
 
 
+# Performs bin encoding on given columns
 def do_cat_bin(X, X_test, cols):
     be = BinaryEncoder(cols=cols).fit(X[cols])
     X_tr = be.transform(X[cols])
@@ -91,6 +99,7 @@ def do_cat_bin(X, X_test, cols):
     return X_tr, X_te, new_cols
 
 
+# Performs frequency encoding on given columns
 def do_cat_freq(X, X_test, cols):
     X_tr = pd.DataFrame()
     X_te = pd.DataFrame()
@@ -109,6 +118,8 @@ def do_cat_freq(X, X_test, cols):
 # --------------------------------------------------------------------------------------------
 # Numerical
 # --------------------------------------------------------------------------------------------
+
+# Performs standard scaling  on given columns
 def do_num_standard(X, X_test, cols):
     sc = StandardScaler()
     X_tr = sc.fit_transform(X[cols])
@@ -116,6 +127,7 @@ def do_num_standard(X, X_test, cols):
     return X_tr, X_te
 
 
+# Performs minmax scaling  on given columns
 def do_num_minmax(X, X_test, cols):
     sc = MinMaxScaler()
     X_tr = sc.fit_transform(X[cols])
@@ -126,6 +138,7 @@ def do_num_minmax(X, X_test, cols):
 # --------------------------------------------------------------------------------------------
 # Special
 # --------------------------------------------------------------------------------------------
+
 def get_feat_knn(df, cols, preffix='knn_'):
     scaler = StandardScaler()
     scaler.fit(df[cols])
@@ -142,20 +155,10 @@ def get_feat_knn(df, cols, preffix='knn_'):
             [preffix + 'mean_dist', preffix + 'max_dist', preffix + 'min_dist']]
 
 
-def do_distr_smooth(X, X_test, cols):
-    for c in cols:
-        agg_tr = X.groupby([c]).aggregate({c: 'count'}).rename(cumns={c: 'Train'}).reset_index()
-        agg_te = X_test.groupby([c]).aggregate({c: 'count'}).rename(columns={c: 'Test'}).reset_index()
-        agg = pd.merge(agg_tr, agg_te, on=c, how='outer')
-
-        agg['Total'] = agg['Train'] + agg['Test']
-        agg = agg[(agg['Train'] / agg['Total'] > 0.2) & (agg['Train'] / agg['Total'] < 0.8)]
-        agg[c + '_Copy'] = agg[c]
-
-        X[c] = pd.merge(X[[c]], agg[[c, c + '_Copy']], on=c, how='left')[c + '_Copy']
-        X_test[c] = pd.merge(X_test[[c]], agg[[c, c + '_Copy']], on=c, how='left')[c + '_Copy']
 
 
+
+# --------------------------------------------------------------------------------------------
 class DoubleValidationEncoder:
     def __init__(self, cols, encoder, splits):
         self.cols = cols
@@ -192,4 +195,3 @@ class DoubleValidationEncoder:
             cols_representation = cols_representation + test_tr / self.folds.n_splits
         cols_representation = pd.DataFrame(cols_representation, columns=X.columns)
         return cols_representation
-

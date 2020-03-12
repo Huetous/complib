@@ -3,8 +3,9 @@ import lightgbm as lgb
 
 
 # --------------------------------------------------------------------------------------------
-def do_bayes(X, y, init_round=15, opt_round=25,
-             n_folds=5, random_seed=42, n_estimators=1000,
+# Performs Bayesian optimisation of parameters
+def do_bayes(X, y, init_round=5, opt_round=15,
+             n_folds=5, random_seed=42, n_estimators=100,
              learning_rate=0.05):
     dtrain = lgb.Dataset(data=X, label=y,
                          #categorical_feature = categorical_feats,
@@ -59,6 +60,3 @@ def do_bayes(X, y, init_round=15, opt_round=25,
 
     return lgbBO.res[max_]['params']
 
-# opt_params = do_bayes(X_ros, y_ros[0], init_round=1, opt_round=1,
-#                       n_folds=2, random_seed=42, n_estimators=50,
-#                       learning_rate=0.03)

@@ -1,20 +1,24 @@
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
 from tqdm import tqdm
 from scipy import stats
 
 
 # ------------------------------------------------------------------------------------------------------
+# Methods for filling nan values
+# ------------------------------------------------------------------------------------------------------
+
+# Filling NAN in given column with it`s median value
 def fillna_median(df, c):
     return df[c].fillna(df[c].median(), inplace=True)
 
 
+# Filling NAN in given column with it`s mode value
 def fillna_mode(df, c):
     return df[c].fillna(df[c].mode()[0], inplace=True)
 
 
+# Filling NAN in given column with values that sampled from it`s distribution
 def fillna_norm(df, c):
     c_avg = df[c].mean()
     c_std = df[c].std()
@@ -25,6 +29,7 @@ def fillna_norm(df, c):
     return df[c]
 
 
+# Clip all values that lie beyond 1 and 99 percentile of given column`s distribution
 def clip_outliers(df, c, qs=None):
     if qs is None:
         qs = [1, 99]
@@ -34,6 +39,10 @@ def clip_outliers(df, c, qs=None):
 
 
 # ------------------------------------------------------------------------------------------------------
+# Methods applied to the entire dataset
+# ------------------------------------------------------------------------------------------------------
+
+# Changes dtype of columns in given dataset to reduce memory usage
 def reduce_memory_usage(df):
     types = ['int16', 'int32', 'int64', 'float16', 'float32', 'float64']
     start_mem = df.memory_usage().sum() / 1024 ** 2
@@ -63,41 +72,7 @@ def reduce_memory_usage(df):
             start_mem - end_mem) / start_mem))
 
 
-# ------------------------------------------------------------------------------------------------------
-def get_single_unique(df):
-    cols = [col for col in df.columns if df[col].nunique() <= 1]
-    if len(cols) > 0:
-        print('There are', len(cols), 'columns with single unique values.')
-        print(cols)
-        return cols
-    else:
-        print('There is none of columns with single unique value.')
-        return None
-
-
-def get_duplicates(df):
-    duplicates = df[df.duplicated()]
-    if len(duplicates) > 0:
-        print('There are', len(duplicates), 'duplicates.')
-        print(duplicates)
-        return duplicates
-    else:
-        print('There is none of duplicates!')
-        return None
-
-
-def get_cols_with_null(df, threshold=0.99):
-    percents = df.isnull().sum() / df.isnull().count()
-    cols = [index for index in percents.index if percents[index] >= threshold]
-    if len(cols) > 0:
-        print('There are', len(cols), 'columns with', threshold, 'percent of null values.')
-        print(cols)
-        return cols
-    else:
-        print('There are none columns with', threshold, 'percent of null values.')
-        return None
-
-
+# Returns summary of all columns
 def get_summary(df):
     print(f"Dataset Shape: {df.shape}")
     summary = pd.DataFrame(df.dtypes, columns=['dtypes'])
@@ -117,10 +92,8 @@ def get_summary(df):
 
     return summary
 
-
-# ------------------------------------------------------------------------------------------------------
-
-
+# Checks if there are columns in given dataset which have missing values
+# and if so - prints it`s name and percent of null values
 def show_cols_with_null(df):
     percents = (df.isnull().sum() / df.isnull().count()).sort_values(ascending=False)
     print('Missing data')
@@ -129,6 +102,8 @@ def show_cols_with_null(df):
             print('{} : {:.5f}'.format(index, percents[index]))
 
 
+# Checks if there are columns in given dataset which have skewed data
+# and if so - prints it`s name and skewness
 def show_skewed(df):
     sk_df = pd.DataFrame([{'column': col, 'uniq': df[col].nunique(),
                            'skewness': stats.skew(df[col])} for col in df.columns])
@@ -137,5 +112,43 @@ def show_skewed(df):
     print(sk_df)
 
 
-# -------------------------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------------------------------
+# Methods that returns set of columns names with some property
+# ------------------------------------------------------------------------------------------------------
+
+# Returns set of columns names which have single unique value
+def get_single_unique(df):
+    cols = [col for col in df.columns if df[col].nunique() <= 1]
+    if len(cols) > 0:
+        print('There are', len(cols), 'columns with single unique values.')
+        print(cols)
+        return cols
+    else:
+        print('There is none of columns with single unique value.')
+        return None
+
+
+# Checks if there are any duplicated values in given dataset, if so - returns count of it
+def check_duplicates(df):
+    duplicates = df[df.duplicated()]
+    if len(duplicates) > 0:
+        print('There are', len(duplicates), 'duplicates.')
+        print(duplicates)
+        return duplicates
+    else:
+        print('There is none of duplicates!')
+        return None
+
+
+# Returns set of columns names which have rate of null values  more than given threshold
+def get_cols_with_null(df, threshold=0.99):
+    percents = df.isnull().sum() / df.isnull().count()
+    cols = [index for index in percents.index if percents[index] >= threshold]
+    if len(cols) > 0:
+        print('There are', len(cols), 'columns with', threshold, 'percent of null values.')
+        print(cols)
+        return cols
+    else:
+        print('There are none columns with', threshold, 'percent of null values.')
+        return None
 

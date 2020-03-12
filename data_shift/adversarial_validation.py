@@ -15,22 +15,13 @@ def get_adv_val(X, X_test):
     train, val = X[X.probas < 0.9], X[X.probas >= 0.9]
     weights = X['probas']
 
-    del X
-    gc.collect()
-
     train = train.drop(["probas"], 1)
     val = val.drop(["probas"], 1)
 
     X_train, y_train = train.drop("target", 1), train.target
-    del train
-    gc.collect()
-
     X_val, y_val = val.drop("target", 1), val.target
-    del val
-    gc.collect()
 
     print("Train shape: {}\nValidation shape: {}\nTest shape: {}".format(X_train.shape, X_val.shape, X_test.shape))
-
     return X_train, y_train, X_val, y_val, X_test, weights
 
 
@@ -43,14 +34,8 @@ def get_adv_feats_by_one(X_train, Y_train, X_test):
     assert (np.all(X_train.columns == X_test.columns))
 
     total = pd.concat([X_train, X_test])
-
-    del X_train, X_test
-    gc.collect()
-
     X_split = total.drop(["is_test", "target"], axis=1)
     y_split = total.is_test
-    del total
-    gc.collect()
 
     model = RandomForestClassifier(n_estimators=50, max_depth=5, min_samples_leaf=5)
     feats = []
@@ -67,7 +52,7 @@ def get_adv_feats_by_one(X_train, Y_train, X_test):
     return df
 
 
-def get_adv_train(X_train, Y_train, X_test, seed=4242):
+def get_adv_train(X_train, Y_train, X_test, seed=42):
     X_train['target'] = Y_train
     X_test['target'] = 0
 
@@ -77,24 +62,14 @@ def get_adv_train(X_train, Y_train, X_test, seed=4242):
 
     total = pd.concat([X_train, X_test])
 
-    del X_train, X_test
-    gc.collect()
-
     X_split = total.drop(["is_test", "target"], axis=1)
     y_split = total.is_test
 
     X_train, X_valid, y_train, y_valid = model_selection.train_test_split(X_split, y_split, test_size=0.2,
                                                                           random_state=seed)
-    del X_split, y_split
-    gc.collect()
 
     dtrain = xgb.DMatrix(data=X_train, label=y_train)
-    del X_train, y_train
-    gc.collect()
-
     dval = xgb.DMatrix(data=X_valid, label=y_valid)
-    del X_valid, y_valid
-    gc.collect()
 
     params = {
         'max_depth': 9,
@@ -113,8 +88,6 @@ def get_adv_train(X_train, Y_train, X_test, seed=4242):
                     num_boost_round=300, evals=watchlist,
                     early_stopping_rounds=50,
                     verbose_eval=100, params=params)
-    del watchlist, dtrain, dval
-    gc.collect()
     print('=' * 40)
     feature_imp = pd.DataFrame(sorted(zip(clf.get_score().keys(), clf.get_score().values())),
                                columns=['Feature', 'Value'])
@@ -128,19 +101,9 @@ def get_adv_train(X_train, Y_train, X_test, seed=4242):
     X_train = total[total.is_test == 0]
     X_test = total[total.is_test == 1]
 
-    del total
-    gc.collect()
-
     X_train.drop(['is_test'], 1, inplace=True)
     X_test.drop(['is_test'], 1, inplace=True)
     dval = xgb.DMatrix(data=X_train.drop(['target'], 1))
     X_train['probas'] = clf.predict(dval)
-    del dval
-    gc.collect()
-
     X_train.sort_values(["probas"], ascending=False, inplace=True)
-
-    del clf
-    gc.collect()
-
     return X_train, X_test, feature_imp

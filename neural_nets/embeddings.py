@@ -5,6 +5,7 @@ from tensorflow.python.keras.layers import SpatialDropout1D, BatchNormalization
 from tensorflow.python.keras.layers import Input
 import numpy as np
 
+# Single embedding for every feature
 def create_model_emb(df):
     nunique = df.nunique().sum()
     emb_size = int(min(50, nunique // 2))
@@ -26,7 +27,7 @@ def create_model_emb(df):
 
     return model
 
-
+# Embedding on each feature
 def create_model_N_emb(df):
     inps = []
     outs = []

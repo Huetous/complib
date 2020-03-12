@@ -1,17 +1,9 @@
 import numpy as np
-from sklearn import model_selection
 import matplotlib.pyplot as plt
 import pandas as pd
 import itertools
 import seaborn as sns
-from tqdm import tqdm
-from sklearn.base import clone
-from sklearn.metrics import f1_score, confusion_matrix
-import lightgbm as lgb
-from huelib.metrics import eval_auc
-import gc
-from sklearn.preprocessing import LabelEncoder
-from sklearn.model_selection import KFold
+from sklearn.metrics import confusion_matrix
 from preprocessing import DoubleValidationEncoder
 
 
@@ -36,7 +28,8 @@ def show_confusion_matrix(cm, classes, cmap=plt.get_cmap('RdBu')):
 
 
 # --------------------------------------------------------------------------------------------
-def get_mode_oof(clf, X, y, X_test,
+# Return out-of-fold predictions, with summary of model performance on each iteration
+def get_oof(clf, X, y, X_test,
                  splits=None,
                  metrics=None, conf_matrix=False,
                  encoder=None, encode_cols=None,

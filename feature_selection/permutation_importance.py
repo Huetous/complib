@@ -12,7 +12,7 @@ from sklearn.metrics import accuracy_score, roc_auc_score
 from sklearn.model_selection import KFold
 
 
-def permutation_importance(X, y, estimator, metric):
+def _permutation_importance(X, y, estimator, metric):
     if not isinstance(X, pd.DataFrame):
         raise TypeError('X must be a pandas DataFrame')
     if not isinstance(y, (pd.Series, np.ndarray)):
@@ -59,7 +59,7 @@ def permutation_importance(X, y, estimator, metric):
     return importances
 
 
-def permutation_importance_cv(X, y, estimator, metric, n_splits=3, shuffle=True,seed=0):
+def _permutation_importance_cv(X, y, estimator, metric, n_splits=3, shuffle=True, seed=0):
     if not isinstance(X, pd.DataFrame):
         raise TypeError('X must be a pandas DataFrame')
     if not isinstance(y, (pd.Series, np.ndarray)):
@@ -76,14 +76,14 @@ def permutation_importance_cv(X, y, estimator, metric, n_splits=3, shuffle=True,
         raise TypeError('Parameter<shuffle> must be True or False')
 
     importances = pd.DataFrame(np.zeros((n_splits, X.shape[1])), columns=X.columns)
-    kf = KFold(n_splits=n_splits, shuffle=shuffle,random_state=seed)
+    kf = KFold(n_splits=n_splits, shuffle=shuffle, random_state=seed)
     iF = 0
     for train_ix, test_ix in kf.split(X):
         t_est = clone(estimator)
         t_est.fit(X.iloc[train_ix, :], y[train_ix])
-        t_imp = permutation_importance(X.iloc[test_ix, :].copy(),
-                                       y[test_ix].copy(),
-                                       t_est, metric)
+        t_imp = _permutation_importance(X.iloc[test_ix, :].copy(),
+                                        y[test_ix].copy(),
+                                        t_est, metric)
         importances.loc[iF, :] = t_imp.loc[0, :]
         iF += 1
 

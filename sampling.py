@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 import catboost
 
-
+# Perfrorms SMOTE over sampling strategy
 def do_smote(X, y, seed=42, sampling_strategy=0.2):
     sm = SMOTE(random_state=seed, sampling_strategy=sampling_strategy)
     X_sm, y_sm = sm.fit_sample(X, y)
@@ -12,21 +12,22 @@ def do_smote(X, y, seed=42, sampling_strategy=0.2):
 
     return X_sm, y_sm
 
-
+# Perfrorms Random over sampling strategy
 def do_ros(X, y, seed=42, sampling_strategy=0.2):
     ros = RandomOverSampler(random_state=seed, sampling_strategy=sampling_strategy)
     X_ros, y_ros = ros.fit_sample(X, y)
     X_ros = pd.DataFrame(X_ros, columns=X.columns)
     return X_ros, y_ros
 
-
+# Perfrorms Random under sampling strategy
 def do_rus(X, y, seed=42, sampling_strategy='majority'):
     rus = RandomUnderSampler(random_state=seed, sampling_strategy=sampling_strategy)
     X_rus, y_rus = rus.fit_sample(X, y)
     X_rus = pd.DataFrame(X_rus, columns=X.columns)
     return X_rus, y_rus
 
-
+# --------------------------------------------------------------------------------------------
+# Return augmented data
 def do_augment(x, y, t=2):
     xp, xn = [], []
     for i in range(t):
@@ -55,7 +56,8 @@ def do_augment(x, y, t=2):
     y = np.concatenate([y, yp, yn])
     return x, y
 
-
+# --------------------------------------------------------------------------------------------
+# Performs pseudo labeling
 def get_pseudo(X_test, preds):
     X_test['target'] = preds
     data = X_test[(X_test['target'] <= 0.01) | (X_test['target'] >= 0.99)].copy()
